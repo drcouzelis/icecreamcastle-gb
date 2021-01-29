@@ -1,0 +1,8 @@
+echo "Cleanup..."
+/usr/bin/rm -v -f main.o hello-world.gb
+echo "Compile..."
+rgbasm -v -o main.o main.asm && \
+echo "Link..."
+rgblink -v -o hello-world.gb main.o && \
+echo "Fix..."
+rgbfix -v -p 0 hello-world.gb
