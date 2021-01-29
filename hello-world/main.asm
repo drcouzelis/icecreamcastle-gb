@@ -55,8 +55,11 @@ Start:
     ld a, %11100100 ; Palette
     ld [rBGP], a
 
-    xor a ; (ld a, 0)
+    ; Set the X, Y position of the text
+    ;xor a ; (ld a, 0)
+    ld a, -8
     ld [rSCY], a
+    ld a, -16
     ld [rSCX], a
 
     ; Turn off sound
@@ -80,5 +83,5 @@ FontTilesEnd:
 SECTION "Hello World string", ROM0
 
 helloWorldStr:
-    db "Hello World!", 0
+    db "Hello Game Boy!", 0
 
