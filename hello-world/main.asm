@@ -52,7 +52,7 @@ Start:
     jr nz, .copyString ; ...and continue if it's not
 
     ; Init display registers
-    ld a, %11100100 ; Palette
+    ld a, %00100110 ; Palette, first number is text, last number is background
     ld [rBGP], a
 
     ; Set the X, Y position of the text
