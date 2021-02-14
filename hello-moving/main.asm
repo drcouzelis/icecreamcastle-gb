@@ -12,16 +12,31 @@ INCLUDE "hardware.inc"
 SECTION "Header", ROM0[$100]
 
 EntryPoint:
-    di ; Disable interrupts (to avoid needing to deal with them for now)
+    nop ; Common practice to have this here
     jp Start ; Leave this tiny space
 
-; Repeat the filler "db 0" command for 46 address spaces ($150 minus $104)
 REPT $150 - $104
     db 0
 ENDR
 
+;; TO DO
+;; Main game loop
+;Main:
+;    halt           ; Stop the system clock return from halt when interrupted
+;    nop            ; Always nop after halt
+;    ld a,[rIE]     ; Get the interrupts
+;    or a           ; V-Blank interrupt?
+;    jr z, Main     ; No, some other interrupt
+;    xor a
+;    ld (VblnkFlag),a ; Clear V-Blank flag
+;    ;call Controls  ; Handle controls input
+;    ;call Update    ; Update the game
+;    ;call Draw      ; Draw the game
+;    jr Main
+
 SECTION "Game code", ROM0
 Start:
+    ei ; Enable interrupts
     ; Turn off the LCD
 .waitVBlank
     ld a, [rLY]
