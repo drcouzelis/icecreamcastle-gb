@@ -4,7 +4,7 @@ OBJECTS=$(SOURCES:.asm=.o)
 
 $(ROM): $(OBJECTS)
 	rgblink -o $(ROM) $(OBJECTS)
-	rgbfix -p 0 $(ROM)
+	rgbfix -v -p 0 $(ROM)
 
 main.o: $(SOURCES)
 	rgbasm -o $(OBJECTS) $(SOURCES)

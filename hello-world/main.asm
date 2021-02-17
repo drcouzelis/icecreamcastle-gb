@@ -21,6 +21,7 @@ REPT $150 - $104
 ENDR
 
 SECTION "Game code", ROM0
+
 Start:
     ; Turn off the LCD
 .waitVBlank
