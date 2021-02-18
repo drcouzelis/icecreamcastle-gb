@@ -4,7 +4,7 @@
 ; Compile with RGB
 
 ; Helpful RGB definitions
-INCLUDE "hardware.inc"
+INCLUDE "inc/hardware.inc"
 
 ; Header
 ; Memory type: ROM 0
@@ -36,6 +36,10 @@ ENDR
 
 SECTION "Game code", ROM0
 Start:
+    ; Turn off sound
+    xor a ; (ld a, 0)
+    ld [rNR52], a
+
     ei ; Enable interrupts
     ; Turn off the LCD
 .waitVBlank
@@ -67,35 +71,43 @@ Start:
     and a ; Check if the byte we just copied is zero...
     jr nz, .copyString ; ...and continue if it's not
 
+.mainLoop
     ; Init display registers
     ld a, %00100110 ; Palette, first number is text, last number is background
     ld [rBGP], a
 
     ; Set the X, Y position of the text
-    ; ...was originally set to 0
-    ;xor a ; (ld a, 0)
     ; ...rSCY and rSCX are the SCROLL / window position, NOT the text position
-    ld a, -8
-    ld [rSCY], a
-    ld a, -16
+    ; Set the X position
+    ld a, -24
     ld [rSCX], a
+    ; Scroll the Y position
+    ld hl, rSCY
+    dec [hl]
+    ld a, -137
+    cp [hl]
+    jr nz, .continueScroll
+    ld [hl], 0
 
-    ; Turn off sound
-    xor a ; (ld a, 0)
-    ld [rNR52], a
-
+.continueScroll
     ; Turn screen on, display the background
     ld a, %10000001
     ld [rLCDC], a
 
-    ; Trap the CPU in an infinite loop
-.lockup
-    jr .lockup
+    ; Loop!
+    call WaitVBlank
+    jr .mainLoop
+
+WaitVBlank:
+    ld a, [rLY]
+    cp 144
+    jr nz, WaitVBlank
+    ret
 
 SECTION "Font", ROM0
 
 FontTiles:
-INCBIN "font.chr" ; Copy contents into my ROM
+INCBIN "inc/font.chr" ; Copy contents into my ROM
 FontTilesEnd:
 
 SECTION "Hello World string", ROM0
