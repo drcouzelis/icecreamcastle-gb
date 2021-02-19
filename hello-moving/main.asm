@@ -1,4 +1,5 @@
 ; Hello Game Boy
+; Now with movement!
 ; David Couzelis 2021-01-28
 ; https://eldred.fr/gb-asm-tutorial/hello-world.html
 ; Compile with RGB
@@ -71,6 +72,9 @@ Start:
     and a ; Check if the byte we just copied is zero...
     jr nz, .copyString ; ...and continue if it's not
 
+    ld a, 4
+    ld [wNextMovement], a
+
 .mainLoop
     ; Init display registers
     ld a, %00100110 ; Palette, first number is text, last number is background
@@ -79,12 +83,21 @@ Start:
     ; Set the X, Y position of the text
     ; ...rSCY and rSCX are the SCROLL / window position, NOT the text position
     ; Set the X position
-    ld a, -24
+    ld a, 232
     ld [rSCX], a
+
+    ; Time to change the Y position?
+    ld hl, wNextMovement
+    dec [hl]
+    ld a, 0
+    cp [hl]
+    jr nz, .continueScroll
+
     ; Scroll the Y position
+    ld [hl], 4
     ld hl, rSCY
     dec [hl]
-    ld a, -137
+    ld a, 119
     cp [hl]
     jr nz, .continueScroll
     ld [hl], 0
@@ -114,4 +127,8 @@ SECTION "Hello World string", ROM0
 
 HelloWorldStr:
     db "Hello Game Boy!", 0
+
+SECTION "Variables", WRAM0
+
+wNextMovement:: db
 
