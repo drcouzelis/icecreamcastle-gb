@@ -11,5 +11,9 @@ main.o: $(SOURCES)
 
 run: $(ROM)
 	sameboy $(<)
+
+debug: $(ROM)
+	bgb --rom $(<)
+
 clean:
 	$(RM) $(ROM) $(OBJECTS)

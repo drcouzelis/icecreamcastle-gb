@@ -54,17 +54,17 @@ Start:
     jr nz, .copyString ; ...and continue if it's not
 
     ; Init display registers
-    ld a, %00100110 ; Palette, first number is text, last number is background
+    ld a, %11100100 ; Palette, first number is text, last number is background
     ld [rBGP], a
 
     ; Set the X, Y position of the text
     ; ...was originally set to 0
-    ;xor a ; (ld a, 0)
+    xor a ; (ld a, 0)
     ; ...rSCY and rSCX are the SCROLL / window position, NOT the text position
-    ld a, -8
-    ld [rSCY], a
-    ld a, -16
-    ld [rSCX], a
+    ;ld a, -8
+    ;ld [rSCY], a
+    ;ld a, -16
+    ;ld [rSCX], a
 
     ; Turn off sound
     xor a ; (ld a, 0)
@@ -92,6 +92,16 @@ HelloWorldStr:
 SECTION "Tiles", ROM0
 
 Tiles:
-INCBIN "res/tiles.2bpp"
+
+; Background tiles
+.background:
+INCBIN "res/tiles-background.2bpp"
+.endBackground:
+
+; Sprite tiles
+.sprites:
+INCBIN "res/tiles-sprites.2bpp"
+.endSprites:
+
 TilesEnd:
 
