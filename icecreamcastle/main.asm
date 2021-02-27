@@ -32,7 +32,7 @@ Start:
     xor a ; (ld a, 0) Reset bit 7 to turn off the screen
     ld [rLCDC], a ; We'll need to write to LCDC again later...
 
-    ld hl, $9000
+    ld hl, $8000
     ld de, Tiles.background
     ld bc, Tiles.endBackground - Tiles.background
 .copyTiles
@@ -44,8 +44,8 @@ Start:
     or c ; ...and this line check if bc is 0
     jr nz, .copyTiles
 
-    ;ld hl, $9800 ; Print the string at the top-left corner of the screen
-    ;ld [hl], 0
+    ld hl, $9800 ; The top-left corner of the screen
+    ld [hl], 2
 ;    ld de, HelloWorldStr
 ;.copyString
 ;    ld a, [de]
