@@ -33,25 +33,26 @@ Start:
     ld [rLCDC], a ; We'll need to write to LCDC again later...
 
     ld hl, $9000
-    ld de, FontTiles
-    ld bc, FontTilesEnd - FontTiles
-.copyFont
+    ld de, Tiles.background
+    ld bc, Tiles.endBackground - Tiles.background
+.copyTiles
     ld a, [de] ; Grab 1 byte from the source
     ld [hli], a ; Place it at the destination, incrementing hl
     inc de ; Move to the next byte
     dec bc ; Decrement count
     ld a, b ; 'dec bc' doesn't update flags, so this line...
     or c ; ...and this line check if bc is 0
-    jr nz, .copyFont
+    jr nz, .copyTiles
 
-    ld hl, $9800 ; Print the string at the top-left corner of the screen
-    ld de, HelloWorldStr
-.copyString
-    ld a, [de]
-    ld [hli], a
-    inc de
-    and a ; Check if the byte we just copied is zero...
-    jr nz, .copyString ; ...and continue if it's not
+    ;ld hl, $9800 ; Print the string at the top-left corner of the screen
+    ;ld [hl], 0
+;    ld de, HelloWorldStr
+;.copyString
+;    ld a, [de]
+;    ld [hli], a
+;    inc de
+;    and a ; Check if the byte we just copied is zero...
+;    jr nz, .copyString ; ...and continue if it's not
 
     ; Init display registers
     ld a, %11100100 ; Palette, first number is text, last number is background
@@ -62,9 +63,9 @@ Start:
     xor a ; (ld a, 0)
     ; ...rSCY and rSCX are the SCROLL / window position, NOT the text position
     ;ld a, -8
-    ;ld [rSCY], a
+    ld [rSCY], a
     ;ld a, -16
-    ;ld [rSCX], a
+    ld [rSCX], a
 
     ; Turn off sound
     xor a ; (ld a, 0)
@@ -87,7 +88,7 @@ FontTilesEnd:
 SECTION "Hello World string", ROM0
 
 HelloWorldStr:
-    db "Hello Game Boy!", 0
+    db "0123456", 0
 
 SECTION "Tiles", ROM0
 
