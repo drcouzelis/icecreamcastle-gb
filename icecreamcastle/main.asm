@@ -32,8 +32,8 @@ Start:
     ld [rLCDC], a
 
     ld hl, $9000
-    ld de, Tiles.background
-    ld bc, Tiles.endBackground - Tiles.background
+    ld de, Resources.background
+    ld bc, Resources.endBackground - Resources.background
 .copyTiles
     ld a, [de] ; Grab 1 byte from the source
     ld [hli], a ; Place it at the destination, incrementing hl
@@ -44,21 +44,17 @@ Start:
     jr nz, .copyTiles
 
 ; Load Level 1 background
-    ld b, 20
     ld hl, $9800 ; The top-left corner of the screen
+    ld de, Resources.level1
+    ld bc, Resources.endLevel1 - Resources.level1
 .loadBG
-    ld a, 2
+    ld a, [de]
     ld [hli], a
-    dec b
+    inc de
+    dec bc
+    ld a, b
+    or c
     jr nz, .loadBG
-
-;    ld de, HelloWorldStr
-;.copyString
-;    ld a, [de]
-;    ld [hli], a
-;    inc de
-;    and a ; Check if the byte we just copied is zero...
-;    jr nz, .copyString ; ...and continue if it's not
 
     ; Init display registers
     ld a, %00011011 ; Palette, first number is text, last number is background
@@ -81,9 +77,9 @@ Start:
 .lockup
     jr .lockup
 
-SECTION "Tiles", ROM0
+SECTION "Resources", ROM0
 
-Tiles:
+Resources:
 
 ; Background tiles
 .background
@@ -94,4 +90,9 @@ INCBIN "res/tiles-background.2bpp"
 .sprites
 INCBIN "res/tiles-sprites.2bpp"
 .endSprites
+
+; Map, level 1
+.level1
+INCBIN "res/tilemap-level1.map"
+.endLevel1
 
