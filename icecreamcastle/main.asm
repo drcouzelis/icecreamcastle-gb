@@ -32,7 +32,7 @@ Start:
     xor a ; (ld a, 0) Reset bit 7 to turn off the screen
     ld [rLCDC], a ; We'll need to write to LCDC again later...
 
-    ld hl, $8000
+    ld hl, $9000
     ld de, Tiles.background
     ld bc, Tiles.endBackground - Tiles.background
 .copyTiles
@@ -55,16 +55,12 @@ Start:
 ;    jr nz, .copyString ; ...and continue if it's not
 
     ; Init display registers
-    ld a, %11100100 ; Palette, first number is text, last number is background
+    ld a, %00011011 ; Palette, first number is text, last number is background
     ld [rBGP], a
 
-    ; Set the X, Y position of the text
-    ; ...was originally set to 0
+    ; Set the X, Y position of the background
     xor a ; (ld a, 0)
-    ; ...rSCY and rSCX are the SCROLL / window position, NOT the text position
-    ;ld a, -8
     ld [rSCY], a
-    ;ld a, -16
     ld [rSCX], a
 
     ; Turn off sound
