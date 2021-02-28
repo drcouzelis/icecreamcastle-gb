@@ -1,9 +1,8 @@
-; Hello Game Boy
-; David Couzelis 2021-01-28
-; https://eldred.fr/gb-asm-tutorial/hello-world.html
+; Ice Cream Castle
+; David Couzelis 2021-02-20
 ; Compile with RGB
 
-; Helpful RGB definitions
+; Helpful RGB compiler definitions
 INCLUDE "hardware.inc"
 
 ; Header
@@ -15,8 +14,8 @@ EntryPoint:
     di ; Disable interrupts (to avoid needing to deal with them for now)
     jp Start ; Leave this tiny space
 
-; Repeat the filler "db 0" command for 46 address spaces ($150 minus $104)
-REPT $150 - $104
+; Fill in the extra space
+REPT $150 - @
     db 0
 ENDR
 
@@ -30,7 +29,7 @@ Start:
     jr c, .waitVBlank
 
     xor a ; (ld a, 0) Reset bit 7 to turn off the screen
-    ld [rLCDC], a ; We'll need to write to LCDC again later...
+    ld [rLCDC], a
 
     ld hl, $9000
     ld de, Tiles.background
@@ -44,8 +43,15 @@ Start:
     or c ; ...and this line check if bc is 0
     jr nz, .copyTiles
 
+; Load Level 1 background
+    ld b, 20
     ld hl, $9800 ; The top-left corner of the screen
-    ld [hl], 2
+.loadBG
+    ld a, 2
+    ld [hli], a
+    dec b
+    jr nz, .loadBG
+
 ;    ld de, HelloWorldStr
 ;.copyString
 ;    ld a, [de]
@@ -75,30 +81,17 @@ Start:
 .lockup
     jr .lockup
 
-SECTION "Font", ROM0
-
-FontTiles:
-INCBIN "font.chr" ; Copy contents into my ROM
-FontTilesEnd:
-
-SECTION "Hello World string", ROM0
-
-HelloWorldStr:
-    db "0123456", 0
-
 SECTION "Tiles", ROM0
 
 Tiles:
 
 ; Background tiles
-.background:
+.background
 INCBIN "res/tiles-background.2bpp"
-.endBackground:
+.endBackground
 
 ; Sprite tiles
-.sprites:
+.sprites
 INCBIN "res/tiles-sprites.2bpp"
-.endSprites:
-
-TilesEnd:
+.endSprites
 
