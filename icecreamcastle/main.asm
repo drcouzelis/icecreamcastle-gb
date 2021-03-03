@@ -77,13 +77,11 @@ Start:
 
 ; Clear sprites
     ld hl, $FE00 ; OAM start
-    ld bc, $FE9F - $FE00 ; ...OAM end
-.clearSprites
+    ld c, 40 * 4 ; 40 sprites, 4 bytes each
     xor a
+.clearSprites
     ld [hli], a
-    dec bc
-    ld a, b
-    or c
+    dec c
     jr nz, .clearSprites
 
 ; Load sprites
