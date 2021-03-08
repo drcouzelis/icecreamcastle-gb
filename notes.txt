@@ -10,3 +10,11 @@ People
 * ISSOtm (THE guy)
 * rondnelson99 (a couple weeks ahead of me)
 
+Conventions
+* Labels use PascalCase
+* Labels in VRAM, SRAM, WRAM, HRAM use PascalCase with a v/s/w/h prefix
+* Local labels use .camelCase
+* Macro names use snake_case
+* Constants use CAPS_SNAKE
+* Constants posing as labels should look like a label
+
