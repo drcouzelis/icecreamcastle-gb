@@ -1,7 +1,12 @@
+Notes
 * Do not disable the screen with every frame, it literally turn off the screen and leaves a "white" frame.
-* Use the V-Blank interrupt for timing the main game loop, or simply waiting for V-Blank to keep things simple.
+* Use the V-Blank interrupt for timing the main game loop.
+* OAM must be cleared before use. It is filled with garbage at boot.
+* DMA is a process that allows fast transfer of graphics from ROM to OAM without needing to use the CPU. It isn't needed but it's useful.
+* It is custom to read the key input and arrange them in a byte, high-to-low, in this order: Down, Up, Left, Right, Start, Select, B, A.
+* It is custom to clear the reading of input, although it may not be needed. (load P1F_GET_NONE into [rP1])
 
-Help
+People
 * ISSOtm (THE guy)
 * rondnelson99 (a couple weeks ahead of me)
 
