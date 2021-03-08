@@ -1,8 +1,0 @@
-ROM0 bank #0:
-  SECTION: $0000-$001a ($001b bytes) ["Build date"]
-           $0006 = BuildDate
-  SECTION: $001b-$001c ($0002 bytes) ["Entry point"]
-           $001b = EntryPoint
-  SECTION: $0100-$014f ($0050 bytes) ["Header"]
-    SLACK: $3f93 bytes
-
