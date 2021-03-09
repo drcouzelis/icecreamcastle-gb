@@ -23,7 +23,7 @@ HERO_START_Y EQU 136
 ; -- Used to time the main game loop
 ; -- Sets a flag notifying that it's time to update the game logic
 ; --
-; -- @return wVBlankFlag 1
+; -- @side wVBlankFlag = 1
 ; --
 SECTION "VBlank Interrupt", ROM0[$0040]
     push hl
@@ -60,53 +60,32 @@ Start:
 
     xor a ; a = 0
     ld [rLCDC], a       ; Turn off the screen
-    ld [wVBlankFlag], a ; Clear the VBlank flag
-    ld [rSCY], a        ; Set the X, Y position of the background to 0
-    ld [rSCX], a
+    ld [wVBlankFlag], a ; VBlankFlag = 0
+    ld [rSCX], a        ; Set the X...
+    ld [rSCY], a        ; ...and Y position of the background to 0
     ld [rNR52], a       ; Turn off sound
 
     call ClearOAM
 
-; Load background tiles
+    ; Load background tiles
     ld hl, $9000
     ld de, Resources.background
     ld bc, Resources.endBackground - Resources.background
-.loadBackgroundTiles
-    ld a, [de] ; Grab 1 byte from the source
-    ld [hli], a ; Place it at the destination, incrementing hl
-    inc de ; Move to the next byte
-    dec bc ; Decrement count
-    ld a, b ; 'dec bc' doesn't update flags, so this line...
-    or c ; ...and this line check if bc is 0
-    jr nz, .loadBackgroundTiles
+    call CopyMem
 
-; Load background
+    ; Load background
     ld hl, $9800 ; The top-left corner of the screen
     ld de, Resources.level1
     ld bc, Resources.endLevel1 - Resources.level1
-.loadBackground
-    ld a, [de]
-    ld [hli], a
-    inc de
-    dec bc
-    ld a, b
-    or c
-    jr nz, .loadBackground
+    call CopyMem
 
-; Load sprite tiles
+    ; Load sprite tiles
     ld hl, $8000
     ld de, Resources.sprites
     ld bc, Resources.endSprites - Resources.sprites
-.loadSpriteTiles
-    ld a, [de]
-    ld [hli], a
-    inc de
-    dec bc
-    ld a, b
-    or c
-    jr nz, .loadSpriteTiles
+    call CopyMem
 
-; Load sprites
+    ; Load sprites
     ; The hero
     ; Set X Position
     ld a, HERO_START_X
@@ -128,10 +107,6 @@ Start:
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
-
-    ; Reset the hero movement
-    ;ld hl, wHeroDX
-    ;ld [hl], HERO_DX_RESET
 
     ld a, IEF_VBLANK
     ld [rIE], a
@@ -188,12 +163,32 @@ GameLoop:
 ; --
 ; -- WaitForVBlank
 ; --
-; -- @returns a Undefined
+; -- @side a Modified
 ; --
 WaitForVBlank:
-    ld a, [rLY]
-    cp 144 ; Check if the LCD is past VBlank
+    ld a, [rLY] ; Is the Screen Y coordinate...
+    cp SCRN_Y   ; ...done drawing the screen?
     jr nz, WaitForVBlank
+    ret
+
+; --
+; -- CopyMem
+; --
+; -- Copy memory from one section to another
+; --
+; -- @param hl The destination address
+; -- @param de The source address
+; -- @param bc The number of bytes to copy
+; -- @side a, bc, de, hl Modified
+; --
+CopyMem:
+    ld a, [de]  ; Grab 1 byte from the source
+    ld [hli], a ; Place it at the destination, incrementing hl
+    inc de      ; Move to the next byte
+    dec bc      ; Decrement count
+    ld a, b     ; 'dec bc' doesn't update flags, so this line...
+    or c        ; ...and this line check if bc is 0
+    jr nz, CopyMem
     ret
 
 ; --
@@ -202,20 +197,16 @@ WaitForVBlank:
 ; -- Set all values in OAM to 0
 ; -- Because OAM is filled with garbage at startup
 ; --
-; -- @return a 0
+; -- @side a, b, hl Modified
 ; --
 ClearOAM:
-    push bc
-    push hl
     ld hl, _OAMRAM
-    ld c, OAM_COUNT * sizeof_OAM_ATTRS ; 40 sprites, 4 bytes each
+    ld b, OAM_COUNT * sizeof_OAM_ATTRS ; 40 sprites, 4 bytes each
     xor a ; a = 0
 .loop
     ld [hli], a
-    dec c
+    dec b
     jr nz, .loop
-    pop hl
-    pop bc
     ret
 
 ; --
@@ -225,8 +216,8 @@ ClearOAM:
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
 ; -- Use "and PADF_<KEYNAME>", if Z is set then the key is pressed
 ; --
-; -- @return a Undefined
-; -- @return b The 8 inputs, 0 means pressed
+; -- @return b The eight inputs, 0 means pressed
+; -- @side a Modified
 ; --
 ReadKeys:
     ; Read D-pad (Down, Up, Left, Right)
@@ -253,11 +244,17 @@ ENDR
     ld [rP1], a
     ret
 
+; --
+; -- Game State Variables
+; --
 SECTION "Game State Variables", WRAM0
 
 wVBlankFlag: db ; If not zero then update the game
 ;wHeroDX: db ; To move the hero at the correct speed
 
+; --
+; -- Resources
+; --
 SECTION "Resources", ROM0
 
 Resources:

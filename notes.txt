@@ -18,3 +18,50 @@ Conventions
 * Constants use CAPS_SNAKE
 * Constants posing as labels should look like a label
 
+Comments
+; --
+; -- The Name
+; --
+; -- A brief description.
+; -- This is a detailed description, if needed.
+; --
+; -- @param de A pointer to the blarg
+; -- @param hl A pointer to the bloog
+; -- @return hl A pointer to the blargitty
+; -- @return a Zero
+; -- @return flags C reset, Z set
+; -- @return wFlag set
+; --
+
+Movement
+----
+Subpixels! Aka fixed-point math
+If you want a speed of 3 pixels over 4 frames, you want a speed of 3/4 (= 0.75) pixels/frame
+To achieve this smoothly, you need to track positions at a precision greater than one pixel
+Since floating-point integers are way overkill for this, you can instead use fixed-point math
+Fixed-point is very easy: you take a number, and simply trim off some digits
+For example, in "3.4" decimal fixed-point, I you would write 0.75 as "0007500"
+3 digits, then an implied comma, then the fractional part
+How comfortable are you with scientific notation and math? It could simplify the explanation
+
+Fixed-point math is literally nothing more than plain integer math
+
+8.8 fixed point math should be relatively straight forward
+cuz then you have a "pixel" byte and a "subpixel" byte so to speak
+
+An extra byte is overkill; 12.4 is typically more adapted for GB
+(2048 pixel range, 16 subpixels/pixel)
+
+Starting at position 0, over 4 frames, the position would be:
+- 0.75
+- 1.5
+- 2.25
+- 3
+So the player would appear to
+- Not move
+- Move
+- Move
+- Move
+The upside is that this works even for more complicated fractions (try implementing a speed of 3/8 pixels/frame using timers), and also works seamlessly if the speed changes (typically, running)
+It's also typically at least as good as using timers, both in terms of code written and performance
+
