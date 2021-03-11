@@ -14,7 +14,7 @@ HERO_OAM_X      EQU (HERO_OAM*_OAMRAM)+OAMA_X
 HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
 HERO_OAM_FLAGS  EQU (HERO_OAM*_OAMRAM)+OAMA_FLAGS
 
-HERO_DX_RESET EQU 5 ; Used to move the hero at the correct speed
+HERO_DX_RESET EQU 4 ; Used to move the hero at the correct speed
 HERO_START_X EQU 48
 HERO_START_Y EQU 136
 ANIM_SPEED   EQU 10 ; Frames until animation time
@@ -132,17 +132,19 @@ GameLoop:
     ld [wVBlankFlag], a ; Done waiting! Clear the VBlank flag
 
     ; Time to update the game!
-    call ReadKeys
 
     ;call Animate
     ld hl, wAnimCounter
     dec [hl]
-    jr nz, .isPressedKeyRight
+    jr nz, .readKeys
     ; Animate!
     ld [hl], ANIM_SPEED      ; Reset the animation counter
     ld a, [HERO_OAM_TILEID]
     xor a, $01               ; Toggle the animation frame
     ld [HERO_OAM_TILEID], a
+
+.readKeys
+    call ReadKeys
 
     ; Character control
 .isPressedKeyRight
@@ -150,51 +152,49 @@ GameLoop:
     and PADF_RIGHT
     jr nz, .isPressedKeyLeft ; Right is not pressed, try left...
     ; Move the hero to the right!
-    xor a
+    xor a ; a = 0
     ld [_OAMRAM + OAMA_FLAGS], a ; Face right
-    /*
-    ; FROM HERE...
+    ; Move 0.75 pixels per frame, or, skip movement every 4th frame
     ld hl, wHeroDX
     dec [hl]
-    ld a, 1
-    cp [hl]
-    jr z, .isPressedKeyLeft ; wHeroDX == 1?
-    xor a ; a = 0
-    cp [hl]
-    jr nz, .moveRight ; wHeroDX != 0?
-    ld [hl], HERO_DX_RESET ; Reset the DX counter
+    jr nz, .moveRight
+    ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
     jr .isPressedKeyLeft
 .moveRight
-    ; ...TO HERE to adjust hero speed
-    */
     ld hl, HERO_OAM_X
     inc [hl] ; Move the hero right
     
 .isPressedKeyLeft
     ld a, b
     and PADF_LEFT
-    jr nz, .inputDone
+    jr nz, .isPressedKeyUp
     ; Move the hero to the left!
     ld a, OAMF_XFLIP
     ld [_OAMRAM + OAMA_FLAGS], a ; Face left
-    /*
-    ; FROM HERE...
+    ; Move 0.75 pixels per frame, or, skip movement every 4th frame
     ld hl, wHeroDX
     dec [hl]
-    ld a, 1
-    cp [hl] ; wHeroDX == 1?
-    jr z, .inputDone
-    xor a
-    cp [hl] ; wHeroDX == 0?
     jr nz, .moveLeft
-    ld [hl], HERO_DX_RESET ; Reset the DX counter
-    jr .inputDone
+    ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
+    jr .isPressedKeyUp
 .moveLeft
-    ; ...TO HERE to adjust hero speed
-    */
     ld hl, HERO_OAM_X
     dec [hl] ; Move the hero left
 
+.isPressedKeyUp
+    ld a, b
+    and PADF_UP
+    jr nz, .isPressedKeyDown
+    ld hl, HERO_OAM_Y
+    dec [hl]
+    
+.isPressedKeyDown
+    ld a, b
+    and PADF_DOWN
+    jr nz, .inputDone
+    ld hl, HERO_OAM_Y
+    inc [hl]
+    
 .inputDone
     jr GameLoop
 
