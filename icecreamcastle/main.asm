@@ -8,13 +8,16 @@ INCLUDE "hardware.inc" ; Common definitions
 ; --
 ; -- Game Constants
 ; --
-HERO_OAM_TILEID EQU _OAMRAM+OAMA_TILEID
-HERO_OAM_X      EQU _OAMRAM+OAMA_X
-HERO_OAM_Y      EQU _OAMRAM+OAMA_Y
-HERO_OAM_FLAGS  EQU _OAMRAM+OAMA_FLAGS
-;HERO_DX_RESET EQU 4 ; Used to move the hero at the correct speed
+HERO_OAM        EQU 1
+HERO_OAM_TILEID EQU (HERO_OAM*_OAMRAM)+OAMA_TILEID
+HERO_OAM_X      EQU (HERO_OAM*_OAMRAM)+OAMA_X
+HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
+HERO_OAM_FLAGS  EQU (HERO_OAM*_OAMRAM)+OAMA_FLAGS
+
+HERO_DX_RESET EQU 5 ; Used to move the hero at the correct speed
 HERO_START_X EQU 48
 HERO_START_Y EQU 136
+ANIM_SPEED   EQU 10 ; Frames until animation time
 
 ; --
 ; -- VBlank Interrupt
@@ -94,10 +97,16 @@ Start:
     ld a, HERO_START_Y
     ld [HERO_OAM_Y], a
     ; Set the sprite tile number
-    xor a
+    xor a ; a = 0
     ld [HERO_OAM_TILEID], a
     ; Set attributes
     ld [HERO_OAM_FLAGS], a
+    ; Init speed
+    ld hl, wHeroDX
+    ld [hl], HERO_DX_RESET ; Reset the DX counter
+    ; Init animation
+    ld a, ANIM_SPEED
+    ld [wAnimCounter], a
 
     ; Init palettes
     ld a, %00011011
@@ -125,6 +134,16 @@ GameLoop:
     ; Time to update the game!
     call ReadKeys
 
+    ;call Animate
+    ld hl, wAnimCounter
+    dec [hl]
+    jr nz, .isPressedKeyRight
+    ; Animate!
+    ld [hl], ANIM_SPEED      ; Reset the animation counter
+    ld a, [HERO_OAM_TILEID]
+    xor a, $01               ; Toggle the animation frame
+    ld [HERO_OAM_TILEID], a
+
     ; Character control
 .isPressedKeyRight
     ld a, b
@@ -133,17 +152,21 @@ GameLoop:
     ; Move the hero to the right!
     xor a
     ld [_OAMRAM + OAMA_FLAGS], a ; Face right
-    ;ld hl, wHeroDX
-    ;dec [hl]
-    ;ld a, 1
-    ;cp [hl] ; wHeroDX == 1?
-    ;jr z, .isPressedKeyLeft
-    ;xor a
-    ;cp [hl] ; wHeroDX == 0?
-    ;jr nz, .moveRight
-    ;ld [hl], HERO_DX_RESET ; Reset the DX counter
-    ;jr .isPressedKeyLeft
-;.moveRight
+    /*
+    ; FROM HERE...
+    ld hl, wHeroDX
+    dec [hl]
+    ld a, 1
+    cp [hl]
+    jr z, .isPressedKeyLeft ; wHeroDX == 1?
+    xor a ; a = 0
+    cp [hl]
+    jr nz, .moveRight ; wHeroDX != 0?
+    ld [hl], HERO_DX_RESET ; Reset the DX counter
+    jr .isPressedKeyLeft
+.moveRight
+    ; ...TO HERE to adjust hero speed
+    */
     ld hl, HERO_OAM_X
     inc [hl] ; Move the hero right
     
@@ -154,6 +177,21 @@ GameLoop:
     ; Move the hero to the left!
     ld a, OAMF_XFLIP
     ld [_OAMRAM + OAMA_FLAGS], a ; Face left
+    /*
+    ; FROM HERE...
+    ld hl, wHeroDX
+    dec [hl]
+    ld a, 1
+    cp [hl] ; wHeroDX == 1?
+    jr z, .inputDone
+    xor a
+    cp [hl] ; wHeroDX == 0?
+    jr nz, .moveLeft
+    ld [hl], HERO_DX_RESET ; Reset the DX counter
+    jr .inputDone
+.moveLeft
+    ; ...TO HERE to adjust hero speed
+    */
     ld hl, HERO_OAM_X
     dec [hl] ; Move the hero left
 
@@ -250,7 +288,9 @@ ENDR
 SECTION "Game State Variables", WRAM0
 
 wVBlankFlag: db ; If not zero then update the game
-;wHeroDX: db ; To move the hero at the correct speed
+
+wAnimCounter: db ; If zero then animate
+wHeroDX: db ; To move the hero at the correct speed
 
 ; --
 ; -- Resources
