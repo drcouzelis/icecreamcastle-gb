@@ -161,6 +161,16 @@ GameLoop:
     ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
     jr .isPressedKeyLeft
 .moveRight
+    push bc
+    ;ld a, [HERO_OAM_X]
+    ;ld b, a
+    ;ld a, [HERO_OAM_Y]
+    ;ld c, a
+    ;;ld d, DIRECTION_DOWN
+    ;ld hl, Resources.level1
+    ;call TestCollision8x8
+    pop bc
+    jr z, .isPressedKeyLeft ; Collision! Skip movement
     ld hl, HERO_OAM_X
     inc [hl] ; Move the hero right
     
@@ -197,6 +207,91 @@ GameLoop:
     
 .inputDone
     jr GameLoop
+
+; --
+; -- TestCollision8x8
+; --
+; -- Test for collision of an 8x8 tile with a background map tile
+; --
+; -- @param b X position
+; -- @param c Y position
+; -- @param d Direction
+; -- @param hl Current level map
+; -- @return z Set if collision
+; -- @side a Modified
+; --
+TestCollision8x8:
+    ; Upper-left pixel
+    ; b is already set to the needed X position
+    ; c is already set to the needed Y position
+    call TestCollision1x1
+    ret z
+    ; Upper-right pixel
+    ; c is already set to the needed Y position
+    ld a, 7
+    add b
+    ld b, a
+    call TestCollision1x1
+    ret z
+    ; Lower-right pixel
+    ; b is already set to the needed X position
+    ld a, 7
+    add c
+    ld c, a
+    call TestCollision1x1
+    ret z
+    ; Lower-left pixel
+    ; c is already set to the needed Y position
+    ld a, 7
+    sub b
+    ld b, a
+    call TestCollision1x1
+    ret ; Just return the answer
+
+; --
+; -- TestCollision1x1
+; --
+; -- Test for collision of a pixel with a background map tile
+; --
+; -- @param b X position
+; -- @param c Y position
+; -- @param d Direction
+; -- @param hl Current level map
+; -- @return z Set if collision
+; -- @side a Modified
+; --
+TestCollision1x1:
+    push hl
+    push bc
+REPT 3    ; Divide by 8
+    sra b
+ENDR
+REPT 3    ; Divide by 8
+    sra c
+ENDR
+    ; pos = (y * 32) + x
+    ; Use de for multiplication
+    push de
+    xor a
+    ld d, a
+    ld e, c        ; de == c, the Y position
+    or e
+.loop
+    jr z, .endLoop ; e == 0?
+    add hl, de     ; Add Y position (looped)
+    dec e
+    jr .loop
+.endLoop
+    ld e, b        ; de == b, the X position
+    add hl, de     ; Add X position
+    pop de
+    ; Is it a brick?
+    ; The background tile we need is now in hl
+    xor a ; a = 0
+    cp [hl] ; If tile 0 (bricks) then collision!
+    pop bc
+    pop hl
+    ret
 
 ; --
 ; -- WaitForVBlank
@@ -291,6 +386,19 @@ wVBlankFlag: db ; If not zero then update the game
 
 wAnimCounter: db ; If zero then animate
 wHeroDX: db ; To move the hero at the correct speed
+
+; --
+; -- Enemies
+; --
+
+; Spikes
+wSpikeList:
+wSpike1:
+.enabled: db
+.x:       db
+.y:       db
+wEndSpikeList:
+
 
 ; --
 ; -- Resources
