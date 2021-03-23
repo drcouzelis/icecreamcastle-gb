@@ -161,16 +161,19 @@ GameLoop:
     ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
     jr .isPressedKeyLeft
 .moveRight
+    ; Collision check
     push bc
-    ;ld a, [HERO_OAM_X]
-    ;ld b, a
-    ;ld a, [HERO_OAM_Y]
-    ;ld c, a
-    ;;ld d, DIRECTION_DOWN
-    ;ld hl, Resources.level1
-    ;call TestCollision8x8
+    ld a, [HERO_OAM_X]
+    inc a                   ; Test one pixel right
+    ld b, a
+    ld a, [HERO_OAM_Y]
+    ld c, a
+    ;ld d, DIRECTION_DOWN
+    ld hl, Resources.level1
+    call TestCollision8x8
     pop bc
     jr z, .isPressedKeyLeft ; Collision! Skip movement
+    ; Collision check end
     ld hl, HERO_OAM_X
     inc [hl] ; Move the hero right
     
@@ -188,6 +191,18 @@ GameLoop:
     ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
     jr .isPressedKeyUp
 .moveLeft
+    ; Collision check
+    push bc
+    ld a, [HERO_OAM_X]
+    dec a                   ; Test one pixel left
+    ld b, a
+    ld a, [HERO_OAM_Y]
+    ld c, a
+    ld hl, Resources.level1
+    call TestCollision8x8
+    pop bc
+    jr z, .isPressedKeyUp ; Collision! Skip movement
+    ; Collision check end
     ld hl, HERO_OAM_X
     dec [hl] ; Move the hero left
 
@@ -195,6 +210,18 @@ GameLoop:
     ld a, b
     and PADF_UP
     jr nz, .isPressedKeyDown
+    ; Collision check
+    push bc
+    ld a, [HERO_OAM_X]
+    ld b, a
+    ld a, [HERO_OAM_Y]
+    dec a                   ; Test one pixel up
+    ld c, a
+    ld hl, Resources.level1
+    call TestCollision8x8
+    pop bc
+    jr z, .isPressedKeyDown ; Collision! Skip movement
+    ; Collision check end
     ld hl, HERO_OAM_Y
     dec [hl]
     
@@ -202,11 +229,23 @@ GameLoop:
     ld a, b
     and PADF_DOWN
     jr nz, .inputDone
+    ; Collision check
+    push bc
+    ld a, [HERO_OAM_X]
+    ld b, a
+    ld a, [HERO_OAM_Y]
+    inc a                   ; Test one pixel down
+    ld c, a
+    ld hl, Resources.level1
+    call TestCollision8x8
+    pop bc
+    jr z, .inputDone ; Collision! Skip movement
+    ; Collision check end
     ld hl, HERO_OAM_Y
     inc [hl]
     
 .inputDone
-    jr GameLoop
+    jp GameLoop
 
 ; --
 ; -- TestCollision8x8
@@ -215,7 +254,7 @@ GameLoop:
 ; --
 ; -- @param b X position
 ; -- @param c Y position
-; -- @param d Direction
+; -- ;@param d Direction
 ; -- @param hl Current level map
 ; -- @return z Set if collision
 ; -- @side a Modified
@@ -228,22 +267,22 @@ TestCollision8x8:
     ret z
     ; Upper-right pixel
     ; c is already set to the needed Y position
-    ld a, 7
-    add b
+    ld a, b
+    add 7
     ld b, a
     call TestCollision1x1
     ret z
     ; Lower-right pixel
     ; b is already set to the needed X position
-    ld a, 7
-    add c
+    ld a, c
+    add 7
     ld c, a
     call TestCollision1x1
     ret z
     ; Lower-left pixel
     ; c is already set to the needed Y position
-    ld a, 7
-    sub b
+    ld a, b
+    sub 7
     ld b, a
     call TestCollision1x1
     ret ; Just return the answer
@@ -255,7 +294,7 @@ TestCollision8x8:
 ; --
 ; -- @param b X position
 ; -- @param c Y position
-; -- @param d Direction
+; -- ;@param d Direction
 ; -- @param hl Current level map
 ; -- @return z Set if collision
 ; -- @side a Modified
@@ -263,32 +302,40 @@ TestCollision8x8:
 TestCollision1x1:
     push hl
     push bc
-REPT 3    ; Divide by 8
-    sra b
-ENDR
-REPT 3    ; Divide by 8
-    sra c
-ENDR
-    ; pos = (y * 32) + x
-    ; Use de for multiplication
     push de
-    xor a
-    ld d, a
-    ld e, c        ; de == c, the Y position
-    or e
+    ; The X position if offset by 8
+    ld a, b
+    sub 8
+    ld b, a
+    ; The Y position if offset by 16
+    ld a, c
+    sub 16
+    ld c, a
+    ; Divide X position by 8
+    srl b
+    srl b
+    srl b
+    ; Divide Y position by 8
+    srl c
+    srl c
+    srl c
+    ; pos = (y * 32) + x
+    ld de, 32
 .loop
-    jr z, .endLoop ; e == 0?
-    add hl, de     ; Add Y position (looped)
-    dec e
+    xor a ; a = 0
+    or c
+    jr z, .endLoop ; Y position == 0?
+    add hl, de     ; Add a row of tile addresses (looped)
+    dec c
     jr .loop
 .endLoop
-    ld e, b        ; de == b, the X position
-    add hl, de     ; Add X position
-    pop de
+    ld c, b
+    ld b, a        ; bc now == b, the X position
+    add hl, bc     ; Add X position
     ; Is it a brick?
     ; The background tile we need is now in hl
-    xor a ; a = 0
     cp [hl] ; If tile 0 (bricks) then collision!
+    pop de
     pop bc
     pop hl
     ret
