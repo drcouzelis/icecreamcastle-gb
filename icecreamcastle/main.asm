@@ -92,9 +92,11 @@ Start:
     ; The hero
     ; Set X Position
     ld a, HERO_START_X
+    ld [wHeroX], a
     ld [HERO_OAM_X], a
     ; Set Y Position
     ld a, HERO_START_Y
+    ld [wHeroY], a
     ld [HERO_OAM_Y], a
     ; Set the sprite tile number
     xor a ; a = 0
@@ -112,6 +114,13 @@ Start:
     ld a, %00011011
     ld [rBGP], a
     ld [rOBP0], a
+
+    ; Init level 1
+    ld bc, Resources.level1
+    ld hl, wCurrLevel
+    ld [hl], c
+    inc hl
+    ld [hl], b ; wCurrLevel now set to Resources.level1
 
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
@@ -319,6 +328,11 @@ TestCollision1x1:
     srl c
     srl c
     srl c
+    ; Load the current level map
+    ld a, [wCurrLevel]
+    ld l, a
+    ld a, [wCurrLevel + 1]
+    ld h, a
     ; pos = (y * 32) + x
     ld de, 32
 .loop
@@ -432,6 +446,17 @@ SECTION "Game State Variables", WRAM0
 wVBlankFlag: db ; If not zero then update the game
 
 wAnimCounter: db ; If zero then animate
+
+; --
+; -- Gameplay
+; --
+wCurrLevel: dw ; The address pointing to the current level
+
+; --
+; -- Hero
+; --
+wHeroX: db  ; X position
+wHeroY: db  ; Y position
 wHeroDX: db ; To move the hero at the correct speed
 
 ; --
