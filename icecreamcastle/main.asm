@@ -19,6 +19,20 @@ HERO_START_X EQU 48
 HERO_START_Y EQU 136
 ANIM_SPEED   EQU 10 ; Frames until animation time
 
+load_current_level_to_hl: MACRO
+    ld a, [wCurrLevel]
+    ld l, a
+    ld a, [wCurrLevel + 1]
+    ld h, a
+    ENDM
+
+set_current_level1: MACRO
+    ld hl, wCurrLevel
+    ld [hl], LOW(Resources.level1)
+    inc hl
+    ld [hl], HIGH(Resources.level1)
+    ENDM
+
 ; --
 ; -- VBlank Interrupt
 ; --
@@ -115,12 +129,8 @@ Start:
     ld [rBGP], a
     ld [rOBP0], a
 
-    ; Init level 1
-    ld bc, Resources.level1
-    ld hl, wCurrLevel
-    ld [hl], c
-    inc hl
-    ld [hl], b ; wCurrLevel now set to Resources.level1
+    ; Set level 1 as the current level
+    set_current_level1
 
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
@@ -178,8 +188,7 @@ GameLoop:
     ld a, [HERO_OAM_Y]
     ld c, a
     ;ld d, DIRECTION_DOWN
-    ld hl, Resources.level1
-    call TestCollision8x8
+    call TestSpriteCollision
     pop bc
     jr z, .isPressedKeyLeft ; Collision! Skip movement
     ; Collision check end
@@ -207,8 +216,7 @@ GameLoop:
     ld b, a
     ld a, [HERO_OAM_Y]
     ld c, a
-    ld hl, Resources.level1
-    call TestCollision8x8
+    call TestSpriteCollision
     pop bc
     jr z, .isPressedKeyUp ; Collision! Skip movement
     ; Collision check end
@@ -226,8 +234,7 @@ GameLoop:
     ld a, [HERO_OAM_Y]
     dec a                   ; Test one pixel up
     ld c, a
-    ld hl, Resources.level1
-    call TestCollision8x8
+    call TestSpriteCollision
     pop bc
     jr z, .isPressedKeyDown ; Collision! Skip movement
     ; Collision check end
@@ -245,8 +252,7 @@ GameLoop:
     ld a, [HERO_OAM_Y]
     inc a                   ; Test one pixel down
     ld c, a
-    ld hl, Resources.level1
-    call TestCollision8x8
+    call TestSpriteCollision
     pop bc
     jr z, .inputDone ; Collision! Skip movement
     ; Collision check end
@@ -257,58 +263,56 @@ GameLoop:
     jp GameLoop
 
 ; --
-; -- TestCollision8x8
+; -- TestSpriteCollision
 ; --
 ; -- Test for collision of an 8x8 tile with a background map tile
 ; --
 ; -- @param b X position
 ; -- @param c Y position
 ; -- ;@param d Direction
-; -- @param hl Current level map
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-TestCollision8x8:
+TestSpriteCollision:
     ; Upper-left pixel
     ; b is already set to the needed X position
     ; c is already set to the needed Y position
-    call TestCollision1x1
+    call TestPixelCollision
     ret z
     ; Upper-right pixel
     ; c is already set to the needed Y position
     ld a, b
     add 7
     ld b, a
-    call TestCollision1x1
+    call TestPixelCollision
     ret z
     ; Lower-right pixel
     ; b is already set to the needed X position
     ld a, c
     add 7
     ld c, a
-    call TestCollision1x1
+    call TestPixelCollision
     ret z
     ; Lower-left pixel
     ; c is already set to the needed Y position
     ld a, b
     sub 7
     ld b, a
-    call TestCollision1x1
+    call TestPixelCollision
     ret ; Just return the answer
 
 ; --
-; -- TestCollision1x1
+; -- TestPixelCollision
 ; --
 ; -- Test for collision of a pixel with a background map tile
 ; --
 ; -- @param b X position
 ; -- @param c Y position
 ; -- ;@param d Direction
-; -- @param hl Current level map
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-TestCollision1x1:
+TestPixelCollision:
     push hl
     push bc
     push de
@@ -328,11 +332,8 @@ TestCollision1x1:
     srl c
     srl c
     srl c
-    ; Load the current level map
-    ld a, [wCurrLevel]
-    ld l, a
-    ld a, [wCurrLevel + 1]
-    ld h, a
+    ; Load the current level map into hl
+    load_current_level_to_hl
     ; pos = (y * 32) + x
     ld de, 32
 .loop
@@ -417,8 +418,8 @@ ReadKeys:
     ; Read D-pad (Down, Up, Left, Right)
     ld a, P1F_GET_DPAD
     ld [rP1], a
-REPT 6
-    ld a, [rP1]
+REPT 2            ; Read multiple times to ensure button presses are received
+    ld a, [rP1]   ; Read the input, 0 means pressed
 ENDR
     or %11110000
     swap a
@@ -426,8 +427,8 @@ ENDR
     ; Read buttons (Start, Select, B, A)
     ld a, P1F_GET_BTN
     ld [rP1], a
-REPT 6            ; Read a few times, to ensure button presses are received
-    ld a, [rP1]   ; Read the input, 0 means "pressed"
+REPT 6            ; Read multiple times to ensure button presses are received
+    ld a, [rP1]   ; Read the input, 0 means pressed
 ENDR
     or %11110000
     ; Combine and load the result in b
@@ -470,7 +471,6 @@ wSpike1:
 .x:       db
 .y:       db
 wEndSpikeList:
-
 
 ; --
 ; -- Resources
