@@ -15,9 +15,18 @@ HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
 HERO_OAM_FLAGS  EQU (HERO_OAM*_OAMRAM)+OAMA_FLAGS
 
 HERO_DX_RESET EQU 4 ; Used to move the hero at the correct speed
-HERO_START_X EQU 48
-HERO_START_Y EQU 136
-ANIM_SPEED   EQU 10 ; Frames until animation time
+HERO_START_X  EQU 48
+HERO_START_Y  EQU 136
+ANIM_SPEED    EQU 10 ; Frames until animation time
+
+TILE_BRICK  EQU 0
+TILE_SPIKES EQU 5
+
+; Directions
+DIR_U EQU %00000001
+DIR_D EQU %00000010
+DIR_L EQU %00000100
+DIR_R EQU %00001000
 
 load_current_level_to_hl: MACRO
     ld a, [wCurrLevel]
@@ -107,11 +116,9 @@ Start:
     ; Set X Position
     ld a, HERO_START_X
     ld [wHeroX], a
-    ld [HERO_OAM_X], a
     ; Set Y Position
     ld a, HERO_START_Y
     ld [wHeroY], a
-    ld [HERO_OAM_Y], a
     ; Set the sprite tile number
     xor a ; a = 0
     ld [HERO_OAM_TILEID], a
@@ -164,12 +171,29 @@ GameLoop:
 
 .readKeys
     call ReadKeys
+    call UpdateHero
 
-    ; Character control
-.isPressedKeyRight
-    ld a, b
+    ; Update the screen
+    ld a, [wHeroX]
+    ld [HERO_OAM_X], a
+    ld a, [wHeroY]
+    ld [HERO_OAM_Y], a
+
+    jr GameLoop
+
+; --
+; -- UpdateHero
+; --
+; -- Move the hero based on key input and gravity
+; --
+; -- @return z Set if collision
+; -- @side a Modified
+; --
+UpdateHero:
+    ; RIGHT
+    ld a, [wKeys]
     and PADF_RIGHT
-    jr nz, .isPressedKeyLeft ; Right is not pressed, try left...
+    jr nz, .endMoveRight ; Right is not pressed, try left...
     ; Move the hero to the right!
     xor a ; a = 0
     ld [_OAMRAM + OAMA_FLAGS], a ; Face right
@@ -178,27 +202,27 @@ GameLoop:
     dec [hl]
     jr nz, .moveRight
     ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
-    jr .isPressedKeyLeft
+    jr .endMoveRight
 .moveRight
     ; Collision check
-    push bc
-    ld a, [HERO_OAM_X]
+    ld a, [wHeroX]
     inc a                   ; Test one pixel right
     ld b, a
-    ld a, [HERO_OAM_Y]
+    ld a, [wHeroY]
     ld c, a
-    ;ld d, DIRECTION_DOWN
+    ld a, DIR_R
+    ld [wHeroDir], a
     call TestSpriteCollision
-    pop bc
-    jr z, .isPressedKeyLeft ; Collision! Skip movement
+    jr z, .endMoveRight ; Collision! Skip movement
     ; Collision check end
-    ld hl, HERO_OAM_X
+    ld hl, wHeroX
     inc [hl] ; Move the hero right
+.endMoveRight
     
-.isPressedKeyLeft
-    ld a, b
+    ; LEFT
+    ld a, [wKeys]
     and PADF_LEFT
-    jr nz, .isPressedKeyUp
+    jr nz, .endMoveLeft
     ; Move the hero to the left!
     ld a, OAMF_XFLIP
     ld [_OAMRAM + OAMA_FLAGS], a ; Face left
@@ -207,69 +231,71 @@ GameLoop:
     dec [hl]
     jr nz, .moveLeft
     ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
-    jr .isPressedKeyUp
+    jr .endMoveLeft
 .moveLeft
     ; Collision check
-    push bc
-    ld a, [HERO_OAM_X]
+    ld a, [wHeroX]
     dec a                   ; Test one pixel left
     ld b, a
-    ld a, [HERO_OAM_Y]
+    ld a, [wHeroY]
     ld c, a
+    ld a, DIR_L
+    ld [wHeroDir], a
     call TestSpriteCollision
-    pop bc
-    jr z, .isPressedKeyUp ; Collision! Skip movement
+    jr z, .endMoveLeft ; Collision! Skip movement
     ; Collision check end
-    ld hl, HERO_OAM_X
+    ld hl, wHeroX
     dec [hl] ; Move the hero left
+.endMoveLeft
 
-.isPressedKeyUp
-    ld a, b
+    ; UP
+    ld a, [wKeys]
     and PADF_UP
-    jr nz, .isPressedKeyDown
+    jr nz, .endMoveUp
     ; Collision check
-    push bc
-    ld a, [HERO_OAM_X]
+    ld a, [wHeroX]
     ld b, a
-    ld a, [HERO_OAM_Y]
+    ld a, [wHeroY]
     dec a                   ; Test one pixel up
     ld c, a
+    ld a, DIR_U
+    ld [wHeroDir], a
     call TestSpriteCollision
-    pop bc
-    jr z, .isPressedKeyDown ; Collision! Skip movement
+    jr z, .endMoveUp ; Collision! Skip movement
     ; Collision check end
-    ld hl, HERO_OAM_Y
+    ld hl, wHeroY
     dec [hl]
+.endMoveUp
     
-.isPressedKeyDown
-    ld a, b
+    ; DOWN
+    ld a, [wKeys]
     and PADF_DOWN
-    jr nz, .inputDone
+    jr nz, .endMoveDown
     ; Collision check
-    push bc
-    ld a, [HERO_OAM_X]
+    ld a, [wHeroX]
     ld b, a
-    ld a, [HERO_OAM_Y]
+    ld a, [wHeroY]
     inc a                   ; Test one pixel down
     ld c, a
+    ld a, DIR_D
+    ld [wHeroDir], a
     call TestSpriteCollision
-    pop bc
-    jr z, .inputDone ; Collision! Skip movement
+    jr z, .endMoveDown ; Collision! Skip movement
     ; Collision check end
-    ld hl, HERO_OAM_Y
+    ld hl, wHeroY
     inc [hl]
+.endMoveDown
     
-.inputDone
-    jp GameLoop
+    ; Done updating hero
+    ret
 
 ; --
 ; -- TestSpriteCollision
 ; --
 ; -- Test for collision of an 8x8 tile with a background map tile
 ; --
-; -- @param b X position
-; -- @param c Y position
-; -- ;@param d Direction
+; -- @param b X position to test
+; -- @param c Y position to test
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
@@ -305,10 +331,12 @@ TestSpriteCollision:
 ; -- TestPixelCollision
 ; --
 ; -- Test for collision of a pixel with a background map tile
+; -- or the edge of the screen
+; -- Takes into account the direction of movement
+; -- The given X/Y position will be adjusted with the Gameboy screen offsets
 ; --
-; -- @param b X position
-; -- @param c Y position
-; -- ;@param d Direction
+; -- @param b X position to check
+; -- @param c Y position to check
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
@@ -316,6 +344,20 @@ TestPixelCollision:
     push hl
     push bc
     push de
+    ; Check if off screen
+    ld a, 0 + 7
+    cp b ; Is the X position == 0?
+    jr z, .endTestPixelCollision
+    ld a, 0 + 15
+    cp c ; Is the Y position == 0?
+    jr z, .endTestPixelCollision
+    ld a, SCRN_X + 8
+    cp b ; Is the X position == edge of screen X?
+    jr z, .endTestPixelCollision
+    ld a, SCRN_Y + 16
+    cp c ; Is the Y position == edge of screen Y+
+    jr z, .endTestPixelCollision
+    ; Check tile collision
     ; The X position if offset by 8
     ld a, b
     sub 8
@@ -334,7 +376,7 @@ TestPixelCollision:
     srl c
     ; Load the current level map into hl
     load_current_level_to_hl
-    ; pos = (y * 32) + x
+    ; Calculate "pos = (y * 32) + x"
     ld de, 32
 .loop
     xor a ; a = 0
@@ -347,9 +389,18 @@ TestPixelCollision:
     ld c, b
     ld b, a        ; bc now == b, the X position
     add hl, bc     ; Add X position
-    ; Is it a brick?
     ; The background tile we need is now in hl
-    cp [hl] ; If tile 0 (bricks) then collision!
+    ; Is it a brick?
+    ld a, TILE_BRICK
+    cp [hl] ; Collision with bricks?
+    jr z, .endTestPixelCollision
+    ; Moving downwards?
+    ld a, [wHeroDir]
+    and DIR_D
+    jr nz, .endTestPixelCollision
+    ld a, TILE_SPIKES
+    cp [hl] ; Collision with spikes going U/L/R?
+.endTestPixelCollision
     pop de
     pop bc
     pop hl
@@ -411,10 +462,12 @@ ClearOAM:
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
 ; -- Use "and PADF_<KEYNAME>", if Z is set then the key is pressed
 ; --
-; -- @return b The eight inputs, 0 means pressed
+; -- @return wKeys The eight inputs, 0 means pressed
 ; -- @side a Modified
 ; --
 ReadKeys:
+    push hl
+    ld hl, wKeys
     ; Read D-pad (Down, Up, Left, Right)
     ld a, P1F_GET_DPAD
     ld [rP1], a
@@ -423,7 +476,7 @@ REPT 2            ; Read multiple times to ensure button presses are received
 ENDR
     or %11110000
     swap a
-    ld b, a ; Store the result in upper-b
+    ld [hl], a ; Store the result
     ; Read buttons (Start, Select, B, A)
     ld a, P1F_GET_BTN
     ld [rP1], a
@@ -431,9 +484,10 @@ REPT 6            ; Read multiple times to ensure button presses are received
     ld a, [rP1]   ; Read the input, 0 means pressed
 ENDR
     or %11110000
-    ; Combine and load the result in b
-    and b
-    ld b, a
+    ; Combine and store the result
+    and [hl]
+    ld [hl], a
+    pop hl
     ; Clear the retrieval of button presses
     ld a, P1F_GET_NONE
     ld [rP1], a
@@ -448,6 +502,8 @@ wVBlankFlag: db ; If not zero then update the game
 
 wAnimCounter: db ; If zero then animate
 
+wKeys: db ; The currently pressed keys, updated every game loop
+
 ; --
 ; -- Gameplay
 ; --
@@ -456,9 +512,11 @@ wCurrLevel: dw ; The address pointing to the current level
 ; --
 ; -- Hero
 ; --
-wHeroX: db  ; X position
-wHeroY: db  ; Y position
-wHeroDX: db ; To move the hero at the correct speed
+wHeroX: db   ; X position
+wHeroY: db   ; Y position
+wHeroDX: db  ; To move the hero at the correct speed
+wHeroDir: db ; The direction the hero is currently moving (U, D, L, R)
+             ; Can change mid-frame, for example, when jumping to the right
 
 ; --
 ; -- Enemies
