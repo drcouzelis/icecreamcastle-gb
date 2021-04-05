@@ -147,6 +147,8 @@ Start:
     ld [rIE], a
     ei ; Enable interrupts
 
+    ; ...setup complete!
+
 GameLoop:
     ld hl, wVBlankFlag
     xor a ; a = 0
@@ -158,6 +160,14 @@ GameLoop:
     ld [wVBlankFlag], a ; Done waiting! Clear the VBlank flag
 
     ; Time to update the game!
+
+    ; Complete all OAM changes first, befor VBlank ends!
+
+    ; Update the screen
+    ld a, [wHeroX]
+    ld [HERO_OAM_X], a
+    ld a, [wHeroY]
+    ld [HERO_OAM_Y], a
 
     ;call Animate
     ld hl, wAnimCounter
@@ -173,13 +183,9 @@ GameLoop:
     call ReadKeys
     call UpdateHero
 
-    ; Update the screen
-    ld a, [wHeroX]
-    ld [HERO_OAM_X], a
-    ld a, [wHeroY]
-    ld [HERO_OAM_Y], a
-
     jr GameLoop
+
+    ; End of the main game loop
 
 ; --
 ; -- UpdateHero
@@ -196,7 +202,7 @@ UpdateHero:
     jr nz, .endMoveRight ; Right is not pressed, try left...
     ; Move the hero to the right!
     xor a ; a = 0
-    ld [_OAMRAM + OAMA_FLAGS], a ; Face right
+    ld [HERO_OAM_FLAGS], a ; Face right ; TODO Move up!
     ; Move 0.75 pixels per frame, or, skip movement every 4th frame
     ld hl, wHeroDX
     dec [hl]
@@ -225,7 +231,7 @@ UpdateHero:
     jr nz, .endMoveLeft
     ; Move the hero to the left!
     ld a, OAMF_XFLIP
-    ld [_OAMRAM + OAMA_FLAGS], a ; Face left
+    ld [HERO_OAM_FLAGS], a ; Face left ; TODO Move up!
     ; Move 0.75 pixels per frame, or, skip movement every 4th frame
     ld hl, wHeroDX
     dec [hl]

@@ -5,6 +5,8 @@ Notes
 * DMA is a process that allows fast transfer of graphics from ROM to OAM without needing to use the CPU. It isn't needed but it's useful.
 * It is custom to read the key input and arrange them in a byte, high-to-low, in this order: Down, Up, Left, Right, Start, Select, B, A.
 * It is custom to clear the reading of input, although it may not be needed. (load P1F_GET_NONE into [rP1])
+* Set a breakpoint with "ld b, b"
+* Make changes to OAM as soon as VBlank starts so you don't run out of time!
 
 People
 * ISSOtm (THE guy)
