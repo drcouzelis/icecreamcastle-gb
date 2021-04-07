@@ -14,7 +14,7 @@ HERO_OAM_X      EQU (HERO_OAM*_OAMRAM)+OAMA_X
 HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
 HERO_OAM_FLAGS  EQU (HERO_OAM*_OAMRAM)+OAMA_FLAGS
 
-HERO_DX_RESET EQU 4 ; Used to move the hero at the correct speed
+HERO_SPEED    EQU %11000000 ; BCD 0.75
 HERO_START_X  EQU 48
 HERO_START_Y  EQU 136
 ANIM_SPEED    EQU 10 ; Frames until animation time
@@ -113,20 +113,22 @@ Start:
 
     ; Load sprites
     ; The hero
-    ; Set X Position
+    ; Load X Position
     ld a, HERO_START_X
     ld [wHeroX], a
-    ; Set Y Position
+    ; Load Y Position
     ld a, HERO_START_Y
     ld [wHeroY], a
+    ; Reset variables
+    xor a ; a = 0
+    ld [wHeroXFudge], a
+    ld [wHeroYFudge], a
+    ld [wHeroFacing], a
     ; Set the sprite tile number
     xor a ; a = 0
     ld [HERO_OAM_TILEID], a
     ; Set attributes
     ld [HERO_OAM_FLAGS], a
-    ; Init speed
-    ld hl, wHeroDX
-    ld [hl], HERO_DX_RESET ; Reset the DX counter
     ; Init animation
     ld a, ANIM_SPEED
     ld [wAnimCounter], a
@@ -169,6 +171,10 @@ GameLoop:
     ld a, [wHeroY]
     ld [HERO_OAM_Y], a
 
+    ; Direction facing
+    ld a, [wHeroFacing]
+    ld [HERO_OAM_FLAGS], a
+
     ;call Animate
     ld hl, wAnimCounter
     dec [hl]
@@ -202,17 +208,15 @@ UpdateHero:
     jr nz, .endMoveRight ; Right is not pressed, try left...
     ; Move the hero to the right!
     xor a ; a = 0
-    ld [HERO_OAM_FLAGS], a ; Face right ; TODO Move up!
-    ; Move 0.75 pixels per frame, or, skip movement every 4th frame
-    ld hl, wHeroDX
-    dec [hl]
-    jr nz, .moveRight
-    ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
-    jr .endMoveRight
-.moveRight
+    ld [wHeroFacing], a ; Face right
+    ; Calculate the hero's new position
+    ld a, [wHeroXFudge]
+    add HERO_SPEED
+    ld [wHeroXFudge], a
+    jr nc, .endMoveRight
     ; Collision check
     ld a, [wHeroX]
-    inc a                   ; Test one pixel right
+    inc a ; Test one pixel right
     ld b, a
     ld a, [wHeroY]
     ld c, a
@@ -231,17 +235,15 @@ UpdateHero:
     jr nz, .endMoveLeft
     ; Move the hero to the left!
     ld a, OAMF_XFLIP
-    ld [HERO_OAM_FLAGS], a ; Face left ; TODO Move up!
-    ; Move 0.75 pixels per frame, or, skip movement every 4th frame
-    ld hl, wHeroDX
-    dec [hl]
-    jr nz, .moveLeft
-    ld [hl], HERO_DX_RESET ; wHeroDX == 0, reset the DX counter
-    jr .endMoveLeft
-.moveLeft
+    ld [wHeroFacing], a ; Face left
+    ; Calculate the hero's new position
+    ld a, [wHeroXFudge]
+    sub HERO_SPEED
+    ld [wHeroXFudge], a
+    jr nc, .endMoveLeft
     ; Collision check
     ld a, [wHeroX]
-    dec a                   ; Test one pixel left
+    dec a ; Test one pixel left
     ld b, a
     ld a, [wHeroY]
     ld c, a
@@ -518,11 +520,17 @@ wCurrLevel: dw ; The address pointing to the current level
 ; --
 ; -- Hero
 ; --
-wHeroX: db   ; X position
-wHeroY: db   ; Y position
-wHeroDX: db  ; To move the hero at the correct speed
-wHeroDir: db ; The direction the hero is currently moving (U, D, L, R)
-             ; Can change mid-frame, for example, when jumping to the right
+wHeroX: db      ; X position
+wHeroY: db      ; Y position
+wHeroXFudge: db ; X position, sub-pixel fractions
+wHeroYFudge: db ; Y position, sub-pixel fractions
+;wHeroDX: db     ; X change, per frame
+;wHeroDY: db     ; Y change, per frame
+;wHeroNewX: db   ; X position, where trying to move to
+;wHeroNewY: db   ; Y position, where trying to move to
+wHeroFacing: db ; The direction the hero is facing, 0 for right, OAMF_XFLIP for left
+wHeroDir: db    ; The direction the hero is currently moving (U, D, L, R)
+                ; Can change mid-frame, for example, when jumping to the right
 
 ; --
 ; -- Enemies
