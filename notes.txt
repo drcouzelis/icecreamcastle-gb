@@ -68,3 +68,5 @@ So the player would appear to
 The upside is that this works even for more complicated fractions (try implementing a speed of 3/8 pixels/frame using timers), and also works seamlessly if the speed changes (typically, running)
 It's also typically at least as good as using timers, both in terms of code written and performance
 
+BCD Conversion
+https://www.exploringbinary.com/binary-converter/

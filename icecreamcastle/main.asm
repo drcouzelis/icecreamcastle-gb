@@ -14,10 +14,14 @@ HERO_OAM_X      EQU (HERO_OAM*_OAMRAM)+OAMA_X
 HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
 HERO_OAM_FLAGS  EQU (HERO_OAM*_OAMRAM)+OAMA_FLAGS
 
-HERO_SPEED    EQU %11000000 ; BCD 0.75
-HERO_START_X  EQU 48
-HERO_START_Y  EQU 136
-ANIM_SPEED    EQU 10 ; Frames until animation time
+HERO_START_X EQU 48
+HERO_START_Y EQU 136
+ANIM_SPEED   EQU 10 ; Frames until animation time
+
+HERO_WALK_SPEED_FUDGE EQU %11000000 ; BCD 0.75
+HERO_JUMP_SPEED       EQU %00000010 ; DEC 2
+HERO_JUMP_SPEED_FUDGE EQU %10001100 ; BCD 0.55 Approx
+GRAVITY_SPEED_FUDGE   EQU %01000000 ; BCD 0.25
 
 TILE_BRICK  EQU 0
 TILE_SPIKES EQU 5
@@ -211,7 +215,7 @@ UpdateHero:
     ld [wHeroFacing], a ; Face right
     ; Calculate the hero's new position
     ld a, [wHeroXFudge]
-    add HERO_SPEED
+    add HERO_WALK_SPEED_FUDGE
     ld [wHeroXFudge], a
     jr nc, .endMoveRight
     ; Collision check
@@ -238,7 +242,7 @@ UpdateHero:
     ld [wHeroFacing], a ; Face left
     ; Calculate the hero's new position
     ld a, [wHeroXFudge]
-    sub HERO_SPEED
+    sub HERO_WALK_SPEED_FUDGE
     ld [wHeroXFudge], a
     jr nc, .endMoveLeft
     ; Collision check
@@ -264,7 +268,7 @@ UpdateHero:
     ld a, [wHeroX]
     ld b, a
     ld a, [wHeroY]
-    dec a                   ; Test one pixel up
+    dec a ; Test one pixel up
     ld c, a
     ld a, DIR_U
     ld [wHeroDir], a
@@ -273,6 +277,7 @@ UpdateHero:
     ; Collision check end
     ld hl, wHeroY
     dec [hl]
+    dec [hl] ; TEMP
 .endMoveUp
     
     ; DOWN
@@ -283,7 +288,7 @@ UpdateHero:
     ld a, [wHeroX]
     ld b, a
     ld a, [wHeroY]
-    inc a                   ; Test one pixel down
+    inc a ; Test one pixel down
     ld c, a
     ld a, DIR_D
     ld [wHeroDir], a
@@ -293,6 +298,21 @@ UpdateHero:
     ld hl, wHeroY
     inc [hl]
 .endMoveDown
+
+    ; Add gravity
+    ; Collision check
+    ld a, [wHeroX]
+    ld b, a
+    ld a, [wHeroY]
+    inc a ; Test one pixel down
+    ld c, a
+    ld a, DIR_D
+    ld [wHeroDir], a
+    call TestSpriteCollision
+    jr z, .endGravity ; Collision! Skip gravity
+    ld hl, wHeroY
+    inc [hl]
+.endGravity
     
     ; Done updating hero
     ret
