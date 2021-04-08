@@ -7,6 +7,7 @@ Notes
 * It is custom to clear the reading of input, although it may not be needed. (load P1F_GET_NONE into [rP1])
 * Set a breakpoint with "ld b, b"
 * Make changes to OAM as soon as VBlank starts so you don't run out of time!
+* Consider doing updates in this order: VRAM -> Palettes -> DMA -> Input
 
 People
 * ISSOtm (THE guy)
