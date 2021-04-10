@@ -264,6 +264,10 @@ UpdateHero:
     ld a, [wKeys]
     and PADF_UP
     jr nz, .endMoveUp
+    ; Clear acceleration
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
     ; Collision check
     ld a, [wHeroX]
     ld b, a
@@ -273,11 +277,11 @@ UpdateHero:
     ld a, DIR_U
     ld [wHeroDir], a
     call TestSpriteCollision
-    jr z, .endMoveUp ; Collision! Skip movement
+    jp z, .endGravity ; Collision! Up was pressed, skip gravity
     ; Collision check end
     ld hl, wHeroY
     dec [hl]
-    dec [hl] ; TEMP
+    jp .endGravity ; Up was pressed, skip gravity
 .endMoveUp
     
     ; DOWN
@@ -299,7 +303,60 @@ UpdateHero:
     inc [hl]
 .endMoveDown
 
-    ; Add gravity
+    ; Gravity
+    ; Check the space below the hero
+    ; Is there collision?
+    ; If yes, DY = 0
+    ; Else, add gravity
+.gravity
+    ld a, [wHeroX]
+    ld b, a
+    ld a, [wHeroY]
+    inc a ; Test one pixel down
+    ld c, a
+    ld a, DIR_D
+    ld [wHeroDir], a
+    call TestSpriteCollision
+    jr nz, .ifNoGravityCollision ; Z set == collision
+.ifGravityCollision
+    ; The hero is standing on solid ground
+    ; Clear DY/Fudge
+    ; Skip gravity
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    jr .endGravity
+.ifNoGravityCollision
+    ; Add gravity to DY every frame
+    ld a, [wHeroDYFudge]
+    add GRAVITY_SPEED_FUDGE
+    ld [wHeroDYFudge], a
+    ld a, [wHeroDY]
+    adc 0 ; Add the carry bit to DY
+    ld [wHeroDY], a ; ...and store it
+.endGravityCollision
+    ; Move Y down DY number of pixels
+    ; One pixel at a time, testing collision along the way
+    ld a, [wHeroDYFudge]
+    ld b, a
+    ld a, [wHeroYFudge]
+    add b ; Add DY Fudge to Y Fudge
+    ld [wHeroYFudge], a ; ...and store it
+    ld a, [wHeroDY]
+    ld b, a
+    ld a, [wHeroY]
+    adc b ; Add DY to Y, with carry from fudge
+    ; Move, one pixel at a time
+    ld b, a ; b is my counter
+.gravityMovementLoop
+    ; While b != 0
+    ;   Check collision one pixel down
+    ;   If no collision, move one pixel down, dec b
+    ;   If yes collision, clean DY/Fudge and break
+    xor a ; a = 0
+    cp b ; b == 0?
+    jr z, .endGravity
+    push bc
     ; Collision check
     ld a, [wHeroX]
     ld b, a
@@ -309,9 +366,20 @@ UpdateHero:
     ld a, DIR_D
     ld [wHeroDir], a
     call TestSpriteCollision
-    jr z, .endGravity ; Collision! Skip gravity
+    pop bc
+    jr z, .gravityCollision ; Collision! Skip movement
+.noGravityCollision
+    ; Move one pixel down
     ld hl, wHeroY
     inc [hl]
+    dec b
+    jr .gravityMovementLoop
+.gravityCollision
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    jr .endGravity
+    
 .endGravity
     
     ; Done updating hero
@@ -540,17 +608,18 @@ wCurrLevel: dw ; The address pointing to the current level
 ; --
 ; -- Hero
 ; --
-wHeroX: db      ; X position
-wHeroY: db      ; Y position
-wHeroXFudge: db ; X position, sub-pixel fractions
-wHeroYFudge: db ; Y position, sub-pixel fractions
-;wHeroDX: db     ; X change, per frame
-;wHeroDY: db     ; Y change, per frame
-;wHeroNewX: db   ; X position, where trying to move to
-;wHeroNewY: db   ; Y position, where trying to move to
-wHeroFacing: db ; The direction the hero is facing, 0 for right, OAMF_XFLIP for left
-wHeroDir: db    ; The direction the hero is currently moving (U, D, L, R)
-                ; Can change mid-frame, for example, when jumping to the right
+wHeroX: db       ; X position
+wHeroY: db       ; Y position
+wHeroXFudge: db  ; X position, sub-pixel fractions
+wHeroYFudge: db  ; Y position, sub-pixel fractions
+;wHeroDX: db      ; X change, per frame
+wHeroDY: db      ; Y change, per frame
+wHeroDYFudge: db ; Y change, per frame
+;wHeroNewX: db    ; X position, where trying to move to
+;wHeroNewY: db    ; Y position, where trying to move to
+wHeroFacing: db  ; The direction the hero is facing, 0 for right, OAMF_XFLIP for left
+wHeroDir: db     ; The direction the hero is currently moving (U, D, L, R)
+                 ; Can change mid-frame, for example, when jumping to the right
 
 ; --
 ; -- Enemies
