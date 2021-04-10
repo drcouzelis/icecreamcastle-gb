@@ -343,9 +343,7 @@ UpdateHero:
     add b ; Add DY Fudge to Y Fudge
     ld [wHeroYFudge], a ; ...and store it
     ld a, [wHeroDY]
-    ld b, a
-    ld a, [wHeroY]
-    adc b ; Add DY to Y, with carry from fudge
+    adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
 .gravityMovementLoop
