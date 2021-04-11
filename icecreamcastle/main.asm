@@ -260,6 +260,25 @@ UpdateHero:
     dec [hl] ; Move the hero left
 .endMoveLeft
 
+    ; JUMP / A
+    ld a, [wKeys]
+    and PADF_A
+    jr nz, .endMoveJump
+    ; Jump!
+    ; Is on solid ground?
+    ; If yes, DY/F - JUMP_SPEED
+    ;   Move pixel by pixel
+    ;   If collision on head, set DY/F = 0
+    ; Add gravity to DY every frame
+    ; YOU LEFT OFF HERE!!!
+    ld a, [wHeroDYFudge]
+    sub HERO_JUMP_SPEED_FUDGE
+    ld [wHeroDYFudge], a
+    ld a, [wHeroDY]
+    sbc HERO_JUMP_SPEED
+    ld [wHeroDY], a
+.endMoveJump
+    
     ; UP
     ld a, [wKeys]
     and PADF_UP
