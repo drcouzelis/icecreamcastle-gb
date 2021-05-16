@@ -32,6 +32,9 @@ DIR_D EQU %00000010
 DIR_L EQU %00000100
 DIR_R EQU %00001000
 
+NOT_JUMPING EQU 0
+IS_JUMPING  EQU 1
+
 load_current_level_to_hl: MACRO
     ld a, [wCurrLevel]
     ld l, a
@@ -128,6 +131,7 @@ Start:
     ld [wHeroXFudge], a
     ld [wHeroYFudge], a
     ld [wHeroFacing], a
+    ld [wHeroJumping], a ; NOT_JUMPING == 0
     ; Set the sprite tile number
     xor a ; a = 0
     ld [HERO_OAM_TILEID], a
@@ -264,20 +268,28 @@ UpdateHero:
     ld a, [wKeys]
     and PADF_A
     jr nz, .endMoveJump
-    ; Jump!
+    ; Try to jump!
     ; Is on solid ground?
-    ; If yes, DY/F - JUMP_SPEED
-    ;   Move pixel by pixel
-    ;   If collision on head, set DY/F = 0
-    ; Add gravity to DY every frame
-    ; YOU LEFT OFF HERE!!!
-    ld a, [wHeroDYFudge]
-    sub HERO_JUMP_SPEED_FUDGE
+    ld a, [wHeroX]
+    ld b, a
+    ld a, [wHeroY]
+    inc a ; Test one pixel down
+    ld c, a
+    ld a, DIR_D
+    ld [wHeroDir], a
+    call TestSpriteCollision
+    jr nz, .endMoveJump ; Z set == collision
+.ifOnSolid
+    ; The hero is standing on solid ground
+    ; Set jumping parameters
+    ld a, HERO_JUMP_SPEED_FUDGE
     ld [wHeroDYFudge], a
-    ld a, [wHeroDY]
-    sbc HERO_JUMP_SPEED
+    ld a, HERO_JUMP_SPEED
     ld [wHeroDY], a
+    ld a, IS_JUMPING
+    ld [wHeroJumping], a ; Mark the character as jumping / moving / headed up
 .endMoveJump
+    ; Not standing on anything solid, ignore the jump button
     
     ; UP
     ld a, [wKeys]
@@ -302,25 +314,66 @@ UpdateHero:
     dec [hl]
     jp .endGravity ; Up was pressed, skip gravity
 .endMoveUp
-    
-    ; DOWN
-    ld a, [wKeys]
-    and PADF_DOWN
-    jr nz, .endMoveDown
+
+    ; Jump
+    ; Move the hero up, if needed
+.jump
+    ld a, [wHeroJumping]
+    cp IS_JUMPING ; Is the hero moving up, aka jumping?
+    jr nz, .gravity ; ...no, skip jumping, move on to adding gravity
+.performJump
+    ; Move Y up DY number of pixels
+    ; One pixel at a time, testing collision along the way
+    ld a, [wHeroDYFudge]
+    ld b, a
+    ld a, [wHeroYFudge]
+    sub b ; Subtract DY Fudge from Y Fudge
+    ld [wHeroYFudge], a ; ...and store it
+    ld a, [wHeroDY]
+    sbc 0 ; Subtract any carry from fudge
+    jr nc, .beginJumpMovementLoop
+    ; If there was a carry, that means it's time to start going down!
+    ld a, NOT_JUMPING
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    jr .endJump ; Starting to travel down, skip the rest of the jump and go to gravity
+.beginJumpMovementLoop
+    ; Move, one pixel at a time
+    ld b, a ; b is my counter
+.jumpMovementLoop
+    ; While b != 0
+    ;   Check collision one pixel up
+    ;   If no collision, move one pixel up, dec b
+    ;   If yes collision, clean DY/Fudge and break
+    xor a ; a = 0
+    cp b ; b == 0?
+    jr z, .endJump
+    push bc
     ; Collision check
     ld a, [wHeroX]
     ld b, a
     ld a, [wHeroY]
-    inc a ; Test one pixel down
+    dec a ; Test one pixel up
     ld c, a
-    ld a, DIR_D
+    ld a, DIR_U
     ld [wHeroDir], a
     call TestSpriteCollision
-    jr z, .endMoveDown ; Collision! Skip movement
-    ; Collision check end
+    pop bc
+    jr z, .jumpCollision ; Collision! Skip movement
+.noJumpCollision
+    ; Move one pixel up
     ld hl, wHeroY
-    inc [hl]
-.endMoveDown
+    dec [hl]
+    dec b
+    jr .jumpMovementLoop
+.jumpCollision
+    ; The hero is bonking his head
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+.endJump
+    ;jr .endGravity ; Done with vertical movement, skip adding gravity
 
     ; Gravity
     ; Check the space below the hero
@@ -635,8 +688,11 @@ wHeroDYFudge: db ; Y change, per frame
 ;wHeroNewX: db    ; X position, where trying to move to
 ;wHeroNewY: db    ; Y position, where trying to move to
 wHeroFacing: db  ; The direction the hero is facing, 0 for right, OAMF_XFLIP for left
+wHeroJumping: db ; If the hero is moving in an upwards direction,
+                 ; NOT_JUMPING (0) for down, IS_JUMPING (1) for up
 wHeroDir: db     ; The direction the hero is currently moving (U, D, L, R)
                  ; Can change mid-frame, for example, when jumping to the right
+                 ; Used when moving pixel by pixel
 
 ; --
 ; -- Enemies
