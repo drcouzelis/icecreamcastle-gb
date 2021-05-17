@@ -373,7 +373,7 @@ UpdateHero:
     ld [wHeroDY], a
     ld [wHeroDYFudge], a
 .endJump
-    ;jr .endGravity ; Done with vertical movement, skip adding gravity
+    jr .endGravity ; Done with vertical movement, skip adding gravity
 
     ; Gravity
     ; Check the space below the hero
