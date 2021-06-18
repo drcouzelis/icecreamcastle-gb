@@ -1,2 +1,2 @@
 # gbgo
-Programming for the Game Boy
+Programming for the Nintendo Game Boy
