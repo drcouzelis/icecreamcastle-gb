@@ -1,17 +1,13 @@
-# hello-world.gb
-"Hello World" for the Game Boy, from ISSOtm's GB ASM tutorial.
+# icecreamcastle.gb
+A conversion of my game Ice Cream Castle, originally for the PICO-8, to the Nintendo Game Boy.
+
+The source for this project started from the "Hello World" tutorial from ISSOtm's GB ASM tutorial.
 
 https://eldred.fr/gb-asm-tutorial/hello-world.html
 
 ## TODO
-- Collision detection
-  - Find movement
-    - Key pressed?
-      - Try move
-      - No collision?
-        - Move!
-
-- Sprite collision
-  - For all sprites
-    - Collision with hero?
-      - Handle!
+- [x] Collision detection
+- [x] Physics / gravity
+- [ ] Jumping
+- [ ] Add enemies
+- [ ] Enemy collision
