@@ -22,6 +22,7 @@ HERO_WALK_SPEED_FUDGE EQU %11000000 ; BCD 0.75
 HERO_JUMP_SPEED       EQU %00000010 ; DEC 2
 HERO_JUMP_SPEED_FUDGE EQU %10001100 ; BCD 0.55 Approx
 GRAVITY_SPEED_FUDGE   EQU %01000000 ; BCD 0.25
+GRAVITY_MAX           EQU 2
 
 TILE_BRICK  EQU 0
 TILE_SPIKES EQU 5
@@ -315,100 +316,94 @@ UpdateHero:
     jp .endGravity ; Up was pressed, skip gravity
 .endMoveUp
 
-    ; Jump
-    ; Move the hero up, if needed
-.jump
-    ld a, [wHeroJumping]
-    cp IS_JUMPING ; Is the hero moving up, aka jumping?
-    jr nz, .gravity ; ...no, skip jumping, move on to adding gravity
-.performJump
-    ; Move Y up DY number of pixels
-    ; One pixel at a time, testing collision along the way
-    ld a, [wHeroDYFudge]
-    ld b, a
-    ld a, [wHeroYFudge]
-    sub b ; Subtract DY Fudge from Y Fudge
-    ld [wHeroYFudge], a ; ...and store it
-    ld a, [wHeroDY]
-    sbc 0 ; Subtract any carry from fudge
-    jr nc, .beginJumpMovementLoop
-    ; If there was a carry, that means it's time to start going down!
-    ld a, NOT_JUMPING
-    xor a ; a = 0
-    ld [wHeroDY], a
-    ld [wHeroDYFudge], a
-    jr .endJump ; Starting to travel down, skip the rest of the jump and go to gravity
-.beginJumpMovementLoop
-    ; Move, one pixel at a time
-    ld b, a ; b is my counter
-.jumpMovementLoop
-    ; While b != 0
-    ;   Check collision one pixel up
-    ;   If no collision, move one pixel up, dec b
-    ;   If yes collision, clean DY/Fudge and break
-    xor a ; a = 0
-    cp b ; b == 0?
-    jr z, .endJump
-    push bc
-    ; Collision check
-    ld a, [wHeroX]
-    ld b, a
-    ld a, [wHeroY]
-    dec a ; Test one pixel up
-    ld c, a
-    ld a, DIR_U
-    ld [wHeroDir], a
-    call TestSpriteCollision
-    pop bc
-    jr z, .jumpCollision ; Collision! Skip movement
-.noJumpCollision
-    ; Move one pixel up
-    ld hl, wHeroY
-    dec [hl]
-    dec b
-    jr .jumpMovementLoop
-.jumpCollision
-    ; The hero is bonking his head
-    xor a ; a = 0
-    ld [wHeroDY], a
-    ld [wHeroDYFudge], a
-.endJump
-    jr .endGravity ; Done with vertical movement, skip adding gravity
+;    ; Jump
+;    ; Move the hero up, if needed
+;.jump
+;    ld a, [wHeroJumping]
+;    cp IS_JUMPING ; Is the hero moving up, aka jumping?
+;    jr nz, .gravity ; ...no, skip jumping, move on to adding gravity
+;.performJump
+;    ; Move Y up DY number of pixels
+;    ; One pixel at a time, testing collision along the way
+;    ld a, [wHeroDYFudge]
+;    ld b, a
+;    ld a, [wHeroYFudge]
+;    sub b ; Subtract DY Fudge from Y Fudge
+;    ld [wHeroYFudge], a ; ...and store it
+;    ld a, [wHeroDY]
+;    sbc 0 ; Subtract any carry from fudge
+;    jr nc, .beginJumpMovementLoop
+;    ; If there was a carry, that means it's time to start going down!
+;    ld a, NOT_JUMPING
+;    xor a ; a = 0
+;    ld [wHeroDY], a
+;    ld [wHeroDYFudge], a
+;    jr .endJump ; Starting to travel down, skip the rest of the jump and go to gravity
+;.beginJumpMovementLoop
+;    ; Move, one pixel at a time
+;    ld b, a ; b is my counter
+;.jumpMovementLoop
+;    ; While b != 0
+;    ;   Check collision one pixel up
+;    ;   If no collision, move one pixel up, dec b
+;    ;   If yes collision, clean DY/Fudge and break
+;    xor a ; a = 0
+;    cp b ; b == 0?
+;    jr z, .endJump
+;    push bc
+;    ; Collision check
+;    ld a, [wHeroX]
+;    ld b, a
+;    ld a, [wHeroY]
+;    dec a ; Test one pixel up
+;    ld c, a
+;    ld a, DIR_U
+;    ld [wHeroDir], a
+;    call TestSpriteCollision
+;    pop bc
+;    jr z, .jumpCollision ; Collision! Skip movement
+;.noJumpCollision
+;    ; Move one pixel up
+;    ld hl, wHeroY
+;    dec [hl]
+;    dec b
+;    jr .jumpMovementLoop
+;.jumpCollision
+;    ; The hero is bonking his head
+;    xor a ; a = 0
+;    ld [wHeroDY], a
+;    ld [wHeroDYFudge], a
+;.endJump
+;    jr .endGravity ; Done with vertical movement, skip adding gravity
 
     ; Gravity
-    ; Check the space below the hero
-    ; Is there collision?
-    ; If yes, DY = 0
-    ; Else, add gravity
-.gravity
-    ld a, [wHeroX]
-    ld b, a
-    ld a, [wHeroY]
-    inc a ; Test one pixel down
-    ld c, a
-    ld a, DIR_D
-    ld [wHeroDir], a
-    call TestSpriteCollision
-    jr nz, .ifNoGravityCollision ; Z set == collision
-.ifGravityCollision
-    ; The hero is standing on solid ground
-    ; Clear DY/Fudge
-    ; Skip gravity
-    xor a ; a = 0
-    ld [wHeroDY], a
-    ld [wHeroDYFudge], a
-    jr .endGravity
-.ifNoGravityCollision
     ; Add gravity to DY every frame
+.addGravity
     ld a, [wHeroDYFudge]
     add GRAVITY_SPEED_FUDGE
     ld [wHeroDYFudge], a
     ld a, [wHeroDY]
     adc 0 ; Add the carry bit to DY
     ld [wHeroDY], a ; ...and store it
-.endGravityCollision
+    ; Test for terminal velocity here!
+    ; Don't go faster than terminal velocity
+    cp a, GRAVITY_MAX
+    jr c, .endGravity ; Not maxed out
+.maxGravity
+    ld [wHeroDY], a ; Cap the speed to GRAVITY_MAX
+    xor a ; a = 0
+    ld [wHeroDYFudge], a ; Zero out fudge
+.endGravity
+
+.verticalMovement
+    ;
+    ; TODO: Edit for UP OR DOWN movement
+    ;
     ; Move Y down DY number of pixels
     ; One pixel at a time, testing collision along the way
+    ; Start by updating YFudge from DYFudge,
+    ; taking Carry into consideration...
+    ; DY doesn't change, unless the hero lands on a solid surface
     ld a, [wHeroDYFudge]
     ld b, a
     ld a, [wHeroYFudge]
@@ -418,14 +413,14 @@ UpdateHero:
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
-.gravityMovementLoop
+.verticalMovementLoop
     ; While b != 0
     ;   Check collision one pixel down
     ;   If no collision, move one pixel down, dec b
-    ;   If yes collision, clean DY/Fudge and break
+    ;   If yes collision, clear DY/Fudge and break
     xor a ; a = 0
     cp b ; b == 0?
-    jr z, .endGravity
+    jr z, .endVerticalMovement
     push bc
     ; Collision check
     ld a, [wHeroX]
@@ -437,20 +432,19 @@ UpdateHero:
     ld [wHeroDir], a
     call TestSpriteCollision
     pop bc
-    jr z, .gravityCollision ; Collision! Skip movement
-.noGravityCollision
+    jr z, .verticalCollision ; Collision! Skip movement
+.noVerticalCollision
     ; Move one pixel down
     ld hl, wHeroY
     inc [hl]
     dec b
-    jr .gravityMovementLoop
-.gravityCollision
+    jr .verticalMovementLoop
+.verticalCollision
     xor a ; a = 0
     ld [wHeroDY], a
     ld [wHeroDYFudge], a
-    jr .endGravity
-    
-.endGravity
+    jr .endVerticalMovement
+.endVerticalMovement
     
     ; Done updating hero
     ret
