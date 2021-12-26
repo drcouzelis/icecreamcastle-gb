@@ -8,7 +8,9 @@ INCLUDE "hardware.inc" ; Common definitions
 ; --
 ; -- Game Constants
 ; --
-HERO_OAM        EQU 1
+
+; Hero sprite position in OAM
+HERO_OAM        EQU 1 ; Sprite #1
 HERO_OAM_TILEID EQU (HERO_OAM*_OAMRAM)+OAMA_TILEID
 HERO_OAM_X      EQU (HERO_OAM*_OAMRAM)+OAMA_X
 HERO_OAM_Y      EQU (HERO_OAM*_OAMRAM)+OAMA_Y
@@ -19,13 +21,16 @@ HERO_START_X EQU 48
 HERO_START_Y EQU 136
 ANIM_SPEED   EQU 10 ; Frames until animation time, 10 is 6 FPS
 
+; Number of pixels moved every frame when walking
 HERO_WALK_SPEED_FUDGE EQU %11000000 ; BCD 0.75
-HERO_JUMP_FRAMES      EQU 24
-GRAVITY_SPEED_FUDGE   EQU %01000000 ; BCD 0.25
-GRAVITY_MAX           EQU 2
 
-TILE_BRICK  EQU 0
-TILE_SPIKES EQU 5
+HERO_JUMP_FRAMES    EQU 24
+GRAVITY_SPEED_FUDGE EQU %01000000 ; BCD 0.25, increase this amount every frame
+GRAVITY_MAX         EQU 2         ; Terminal velocity, 2 pixels per frame
+
+; Background tiles
+TILE_BRICK  EQU 0 ; Bricks have collision detection
+TILE_SPIKES EQU 5 ; Spikes have collision only from left, bottom, right sides
 
 ; Directions
 DIR_U EQU %00000001
@@ -33,21 +38,16 @@ DIR_D EQU %00000010
 DIR_L EQU %00000100
 DIR_R EQU %00001000
 
-NOT_JUMPING EQU 0
-IS_JUMPING  EQU 1
-
+; --
+; -- Load current level to HL
+; --
+; -- A convenience macro
 load_current_level_to_hl: MACRO
+    ; Set HL to point to wCurrentLevel
     ld a, [wCurrLevel]
     ld l, a
     ld a, [wCurrLevel + 1]
     ld h, a
-    ENDM
-
-set_current_level1: MACRO
-    ld hl, wCurrLevel
-    ld [hl], LOW(Resources.level1)
-    inc hl
-    ld [hl], HIGH(Resources.level1)
     ENDM
 
 ; --
@@ -101,20 +101,26 @@ Start:
 
     call ClearOAM
 
+    ; Set level 1 as the current level
+    ld hl, wCurrLevel
+    ld [hl], LOW(Resources.level1)
+    inc hl
+    ld [hl], HIGH(Resources.level1)
+
     ; Load background tiles
-    ld hl, $9000
+    ld hl, _VRAM9000 ; $9000
     ld de, Resources.background
     ld bc, Resources.endBackground - Resources.background
     call CopyMem
 
     ; Load background
-    ld hl, $9800 ; The top-left corner of the screen
+    ld hl, _SCRN0 ; $9800 ; The top-left corner of the screen
     ld de, Resources.level1
     ld bc, Resources.endLevel1 - Resources.level1
     call CopyMem
 
     ; Load sprite tiles
-    ld hl, $8000
+    ld hl, _VRAM ; $8000
     ld de, Resources.sprites
     ld bc, Resources.endSprites - Resources.sprites
     call CopyMem
@@ -146,9 +152,6 @@ Start:
     ld a, %00011011
     ld [rBGP], a
     ld [rOBP0], a
-
-    ; Set level 1 as the current level
-    set_current_level1
 
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
@@ -506,13 +509,13 @@ TestPixelCollision:
     ; Is it a brick?
     ld a, TILE_BRICK
     cp [hl] ; Collision with bricks?
-    jr z, .endTestPixelCollision
+    jr z, .endTestPixelCollision ; ...collision! Set z
     ; Moving downwards?
     ld a, [wHeroDir]
-    and DIR_D
-    jr nz, .endTestPixelCollision
+    and DIR_D ; Moving downwards?
+    jr nz, .endTestPixelCollision ; ...no! Test for spike collision...
     ld a, TILE_SPIKES
-    cp [hl] ; Collision with spikes going U/L/R?
+    cp [hl] ; Collision with spikes going up, left, right? If yes, set z
 .endTestPixelCollision
     pop de
     pop bc
@@ -542,7 +545,7 @@ WaitForVBlank:
 ; --
 CopyMem:
     ld a, [de]  ; Grab 1 byte from the source
-    ld [hli], a ; Place it at the destination, incrementing hl
+    ldi [hl], a ; Place it at the destination, incrementing hl
     inc de      ; Move to the next byte
     dec bc      ; Decrement count
     ld a, b     ; 'dec bc' doesn't update flags, so this line...
@@ -563,7 +566,7 @@ ClearOAM:
     ld b, OAM_COUNT * sizeof_OAM_ATTRS ; 40 sprites, 4 bytes each
     xor a ; a = 0
 .loop
-    ld [hli], a
+    ldi [hl], a
     dec b
     jr nz, .loop
     ret
@@ -620,7 +623,7 @@ wKeys: db ; The currently pressed keys, updated every game loop
 ; --
 ; -- Gameplay
 ; --
-wCurrLevel: dw ; The address pointing to the current level
+wCurrLevel: dw ; Points to the address of the current level
 
 ; --
 ; -- Hero
@@ -677,6 +680,10 @@ INCBIN "res/tilemap-level1.map"
 ; --
 ; -- OLD UNUSED CODE
 ; --
+
+; Jump info
+;NOT_JUMPING EQU 0
+;IS_JUMPING  EQU 1
 
 ;HERO_JUMP_SPEED       EQU %00000010 ; DEC 2
 ;HERO_JUMP_SPEED_FUDGE EQU %10001100 ; BCD 0.55 Approx
