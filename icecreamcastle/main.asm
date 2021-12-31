@@ -24,8 +24,11 @@ ANIM_SPEED   EQU 10 ; Frames until animation time, 10 is 6 FPS
 ; Number of pixels moved every frame when walking
 HERO_WALK_SPEED_FUDGE EQU %11000000 ; BCD 0.75
 
-HERO_JUMP_FRAMES    EQU 24
-GRAVITY_SPEED_FUDGE EQU %01000000 ; BCD 0.25, increase this amount every frame
+; Jump up with a velocity of 2.75 pixels per frame
+HERO_JUMP_VEL       EQU 2
+HERO_JUMP_VEL_FUDGE EQU %11000000
+
+GRAVITY_SPEED_FUDGE EQU %00100111 ; BCD 0.15234375, increase this amount every frame
 GRAVITY_MAX         EQU 2         ; Terminal velocity, 2 pixels per frame
 
 ; Background tiles
@@ -39,21 +42,9 @@ DIR_L EQU %00000100
 DIR_R EQU %00001000
 
 ; --
-; -- Load current level to HL
-; --
-; -- A convenience macro
-load_current_level_to_hl: MACRO
-    ; Set HL to point to wCurrentLevel
-    ld a, [wCurrLevel]
-    ld l, a
-    ld a, [wCurrLevel + 1]
-    ld h, a
-    ENDM
-
-; --
 ; -- VBlank Interrupt
 ; --
-; -- Called approximately 60 times per second
+; -- Called 60 times per second
 ; -- Used to time the main game loop
 ; -- Sets a flag notifying that it's time to update the game logic
 ; --
@@ -101,12 +92,6 @@ Start:
 
     call ClearOAM
 
-    ; Set level 1 as the current level
-    ld hl, wCurrLevel
-    ld [hl], LOW(Resources.level1)
-    inc hl
-    ld [hl], HIGH(Resources.level1)
-
     ; Load background tiles
     ld hl, _VRAM9000 ; $9000
     ld de, Resources.background
@@ -138,7 +123,7 @@ Start:
     ld [wHeroXFudge], a
     ld [wHeroYFudge], a
     ld [wHeroFacing], a
-    ld [wHeroJumpFrames], a
+    ld [wHeroIsJumping], a
     ; Set the sprite tile number
     xor a ; a = 0
     ld [HERO_OAM_TILEID], a
@@ -187,15 +172,15 @@ GameLoop:
     ld a, [wHeroFacing]
     ld [HERO_OAM_FLAGS], a
 
-    ;call Animate
-    ld hl, wAnimCounter
-    dec [hl]
-    jr nz, .readKeys
-    ; Animate!
-    ld [hl], ANIM_SPEED      ; Reset the animation counter
-    ld a, [HERO_OAM_TILEID]
-    xor a, $01               ; Toggle the animation frame
-    ld [HERO_OAM_TILEID], a
+    ;; Is it time to animate?
+    ;ld hl, wAnimCounter
+    ;dec [hl]
+    ;jr nz, .readKeys
+    ;; Animate!
+    ;ld [hl], ANIM_SPEED      ; Reset the animation counter
+    ;ld a, [HERO_OAM_TILEID]
+    ;xor a, $01               ; Toggle the animation frame
+    ;ld [HERO_OAM_TILEID], a
 
 .readKeys
     call ReadKeys
@@ -268,12 +253,42 @@ UpdateHero:
     dec [hl] ; Move the hero left
 .endMoveLeft
 
+;
+; JUMP / vertical movement algorithm
+;
+; (Controller input)
+; Is the A button pressed?
+; Y -> Is the hero on solid ground?
+;      Y -> Set IS_JUMPING to 1
+;           Set DY to the initial jumping velocity
+;
+; (Apply gravity)
+; Is the hero jumping / IS_JUMPING is set to 1?
+; Y -> Apply gravity by SUBTRACTING it from DY
+;      Did DY down rollover past 0?
+;      Y -> Set IS_JUMPING to 0
+;           Set DY to 0
+; N -> Apply gravity by ADDING it to DY
+;      Is DY at terminal velocity?
+;      Y -> Cap DY at terminal velocity
+;
+; (Move the hero)
+; Is the hero jumping / IS_JUMPING is set to 1?
+; Y -> Move the hero UP according to DY
+;      Did the hero bonk his head?
+;      Y -> Set IS_JUMPING to 0
+;           Set DY to 0
+; N -> Move the hero DOWN according to DY
+;
+
     ; JUMP / A
     ld a, [wKeys]
     and PADF_A
-    jr nz, .endMoveJump
+    jr nz, .endJumpInput ; Z set == A button pressed
+    ; Jump button was pressed!
     ; Try to jump!
-    ; Is on solid ground?
+    ; Is the hero on solid ground?
+    ; Collision check
     ld a, [wHeroX]
     ld b, a
     ld a, [wHeroY]
@@ -282,58 +297,48 @@ UpdateHero:
     ld a, DIR_D
     ld [wHeroDir], a
     call TestSpriteCollision
-    jr nz, .endMoveJump ; Z set == collision
+    ; If not standing on anything solid then ignore the jump button
+    jr nz, .endJumpInput ; Z set == collision
+    ; Collision check end
 .ifOnSolid
     ; The hero is standing on solid ground
     ; Set jumping parameters
-    ld a, HERO_JUMP_FRAMES ; The number of frames to jump up, counts down to 0
-    ld [wHeroJumpFrames], a
-.endMoveJump
-    ; Not standing on anything solid, ignore the jump button
+    ld a, 1
+    ld [wHeroIsJumping], a
+    ld a, HERO_JUMP_VEL
+    ld [wHeroDY], a
+    ld a, HERO_JUMP_VEL_FUDGE
+    ld [wHeroDYFudge], a
+    xor a ; a = 0
+    ; Clear any leftover movement fudge, for consistent jumping
+    ld [wHeroYFudge], a
+.endJumpInput
     
-    ; Jump
-    ; Is the hero jumping up? Jump Frames > 0?
-    xor a ; a = 0
-    ld hl, wHeroJumpFrames
-    cp [hl]
-    jr z, .endJump
-    ; Clear acceleration
-    xor a ; a = 0
-    ld [wHeroDY], a
-    ld [wHeroDYFudge], a
-    ; Can move up?
-    ; Collision check
-    ld a, [wHeroX]
-    ld b, a
-    ld a, [wHeroY]
-    dec a ; Test one pixel up
-    ld c, a
-    ld a, DIR_U
-    ld [wHeroDir], a
-    call TestSpriteCollision
-    jp z, .headBonk ; Collision!
-    ; Collision check end
-    ; Move up!
-    ld hl, wHeroY
-    dec [hl]
-    dec [hl] ; Again, to speed things up
-    ld hl, wHeroJumpFrames
-    dec [hl]
-    dec [hl] ; Again, to speed things up
-    jp .endGravity ; Jumping up, skip gravity
-.headBonk
-    ; Hero bonked his head, cancel the jump
-    ; Clear the jump
-    xor a ; a = 0
-    ld [wHeroDY], a
-    ld [wHeroDYFudge], a
-    ld [wHeroJumpFrames], a
-.endJump
-
     ; Gravity
     ; Add gravity to DY every frame
     ; This section ONLY changes velocity, NOT the actual Y position
 .addGravity
+    ld a, [wHeroIsJumping]
+    cp 0 ; Is the hero jumping?
+    jr z, .addGravityDown
+.addGravityUp
+    ; The hero is jumping up
+    ld a, [wHeroDYFudge]
+    sub GRAVITY_SPEED_FUDGE
+    ld [wHeroDYFudge], a
+    ld a, [wHeroDY]
+    sbc 0 ; Add the carry bit to DY
+    ld [wHeroDY], a ; ...and store it
+    jr nc, .endGravity ; Check if the velocity has gone below 0
+    ; The hero is at the apex of the jump
+    ; Clear the velocity and start falling
+    xor a ; a = 0
+    ld [wHeroIsJumping], a
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    jr .endGravity
+.addGravityDown
+    ; The hero is falling down
     ld a, [wHeroDYFudge]
     add GRAVITY_SPEED_FUDGE
     ld [wHeroDYFudge], a
@@ -351,15 +356,68 @@ UpdateHero:
 .endGravity
 
 .verticalMovement
-    ;
-    ; TODO: Edit for UP OR DOWN movement
-    ;       This currently only works for downward movement
+    ld a, [wHeroIsJumping]
+    cp 0 ; Is the hero jumping?
+    jr z, .verticalMovementDown
+.verticalMovementUp
+    ; The hero is jumping up
+    ld a, [wHeroDYFudge]
+    ld b, a
+    ld a, [wHeroYFudge]
+    ; TODO
+    ; SHOULD THIS BE ADD OR SUB???
+    sub b ; (Add DY Fudge to Y Fudge / Subtract DY Fudge from Y Fudge)
+    ld [wHeroYFudge], a ; ...and store it
+    ld a, [wHeroDY]
+    adc 0 ; Subtract any carry from fudge
+    ; Move, one pixel at a time
+    ld b, a ; b is my counter
+.verticalMovementUpLoop
+    ; While b != 0
+    ;   Check collision one pixel up
+    ;   If no collision, move one pixel up, dec b
+    ;   If yes collision, clear DY/Fudge and break
+    xor a ; a = 0
+    cp b ; b == 0?
+    jr z, .endVerticalMovement
+    push bc
+    ; Collision check
+    ld a, [wHeroX]
+    ld b, a
+    ld a, [wHeroY]
+    dec a ; Test one pixel up
+    ld c, a
+    ld a, DIR_U
+    ld [wHeroDir], a
+    call TestSpriteCollision
+    ; Collision check end
+    pop bc
+    jr z, .verticalCollisionUp ; Collision! Skip movement
+.noVerticalCollisionUp
+    ; Move one pixel up
+    ld hl, wHeroY
+    dec [hl]
+    dec b
+    jr .verticalMovementUpLoop
+.verticalCollisionUp
+    ; Head bonk!
+    ; The hero bonked his head!
+    ; Cancel the jump
+    xor a ; a = 0
+    ld [wHeroIsJumping], a
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    jr .endVerticalMovement
+
+.verticalMovementDown
+    ; The hero is falling down
     ;
     ; Move Y down DY number of pixels
     ; One pixel at a time, testing collision along the way
     ; Start by updating YFudge from DYFudge,
     ; taking Carry into consideration...
     ; DY doesn't change, unless the hero lands on a solid surface
+    ;
     ld a, [wHeroDYFudge]
     ld b, a
     ld a, [wHeroYFudge]
@@ -369,7 +427,7 @@ UpdateHero:
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
-.verticalMovementLoop
+.verticalMovementDownLoop
     ; While b != 0
     ;   Check collision one pixel down
     ;   If no collision, move one pixel down, dec b
@@ -388,14 +446,14 @@ UpdateHero:
     ld [wHeroDir], a
     call TestSpriteCollision
     pop bc
-    jr z, .verticalCollision ; Collision! Skip movement
-.noVerticalCollision
+    jr z, .verticalCollisionDown ; Collision! Skip movement
+.noVerticalCollisionDown
     ; Move one pixel down
     ld hl, wHeroY
     inc [hl]
     dec b
-    jr .verticalMovementLoop
-.verticalCollision
+    jr .verticalMovementDownLoop
+.verticalCollisionDown
     xor a ; a = 0
     ld [wHeroDY], a
     ld [wHeroDYFudge], a
@@ -491,7 +549,7 @@ TestPixelCollision:
     srl c
     srl c
     ; Load the current level map into hl
-    load_current_level_to_hl
+    ld hl, Resources.level1
     ; Calculate "pos = (y * 32) + x"
     ld de, 32
 .loop
@@ -621,11 +679,6 @@ wAnimCounter: db ; If zero then animate
 wKeys: db ; The currently pressed keys, updated every game loop
 
 ; --
-; -- Gameplay
-; --
-wCurrLevel: dw ; Points to the address of the current level
-
-; --
 ; -- Hero
 ; --
 wHeroX: db       ; X position
@@ -635,7 +688,7 @@ wHeroYFudge: db  ; Y position, sub-pixel fractions
 wHeroDY: db      ; Y change, per frame
 wHeroDYFudge: db ; Y change, per frame
 wHeroFacing: db  ; The direction the hero is facing, 0 for right, OAMF_XFLIP for left
-wHeroJumpFrames: db ; The number of frames the hero will spend jumping up
+wHeroIsJumping: db ; Set if the hero is currently jumping up
 wHeroDir: db     ; The direction the hero is currently moving (U, D, L, R)
                  ; Can change mid-frame, for example, when jumping to the right
                  ; Used when moving pixel by pixel
@@ -680,6 +733,16 @@ INCBIN "res/tilemap-level1.map"
 ; --
 ; -- OLD UNUSED CODE
 ; --
+
+;; --
+;; -- Gameplay
+;; --
+;wCurrLevel: dw ; Points to the address of the current level
+;    ; Set level 1 as the current level
+;    ld hl, wCurrLevel
+;    ld [hl], LOW(Resources.level1)
+;    inc hl
+;    ld [hl], HIGH(Resources.level1)
 
 ; Jump info
 ;NOT_JUMPING EQU 0
