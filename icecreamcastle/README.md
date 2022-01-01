@@ -1,13 +1,20 @@
 # icecreamcastle.gb
-A conversion of my game Ice Cream Castle, originally for the PICO-8, to the Nintendo Game Boy.
 
-The source for this project started from the "Hello World" tutorial from ISSOtm's GB ASM tutorial.
+A conversion of my game [Ice Cream Castle](https://github.com/drcouzelis/pico-8), originally for the PICO-8, to the Nintendo Game Boy.
 
-https://eldred.fr/gb-asm-tutorial/hello-world.html
+The source for this project started from the "Hello World" tutorial from ISSOtm's [GB ASM tutorial](https://eldred.fr/gb-asm-tutorial/hello-world.html).
+
+The "hardware.inc" reference file is from [the gbdev community](https://github.com/gbdev/hardware.inc).
+
+Some macros and other ideas are from the work of [mdsteele](https://github.com/mdsteele/big2small).
 
 ## TODO
+
 - [x] Collision detection
 - [x] Physics / gravity
-- [ ] Jumping
-- [ ] Add enemies
-- [ ] Enemy collision
+- [x] Jumping
+- [ ] Add spikes collision / death / restart
+- [ ] Add laser enemies
+- [ ] Add saw enemies
+- [ ] Tries counter
+- [ ] ...stretch goal... Level 2!

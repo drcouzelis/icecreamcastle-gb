@@ -3,11 +3,17 @@
 ; -- David Couzelis 2021-02-20
 ; -- 
 
-INCLUDE "hardware.inc" ; Common definitions
+INCLUDE "hardware.inc" ; Common Game Boy definitions
+INCLUDE "macros.inc"   ; For convenience
 
 ; --
 ; -- Game Constants
 ; --
+
+; Video RAM
+VRAM_BLOCK_0 EQU _VRAM         ; $8000, used for OAM sprites
+VRAM_BLOCK_1 EQU _VRAM + $800  ; $8800
+VRAM_BLOCK_2 EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Hero sprite position in OAM
 HERO_OAM        EQU 1 ; Sprite #1
@@ -93,7 +99,7 @@ Start:
     call ClearOAM
 
     ; Load background tiles
-    ld hl, _VRAM9000 ; $9000
+    ld hl, VRAM_BLOCK_2
     ld de, Resources.background
     ld bc, Resources.endBackground - Resources.background
     call CopyMem
@@ -105,7 +111,7 @@ Start:
     call CopyMem
 
     ; Load sprite tiles
-    ld hl, _VRAM ; $8000
+    ld hl, VRAM_BLOCK_0
     ld de, Resources.sprites
     ld bc, Resources.endSprites - Resources.sprites
     call CopyMem
@@ -519,26 +525,26 @@ TestPixelCollision:
     push bc
     push de
     ; Check if off screen
-    ld a, 0 + 7
+    ld a, 0 + (OAM_X_OFS - 1)
     cp b ; Is the X position == 0?
     jr z, .endTestPixelCollision
-    ld a, 0 + 15
+    ld a, 0 + (OAM_Y_OFS - 1)
     cp c ; Is the Y position == 0?
     jr z, .endTestPixelCollision
-    ld a, SCRN_X + 8
+    ld a, SCRN_X + OAM_X_OFS
     cp b ; Is the X position == edge of screen X?
     jr z, .endTestPixelCollision
-    ld a, SCRN_Y + 16
+    ld a, SCRN_Y + OAM_Y_OFS
     cp c ; Is the Y position == edge of screen Y+
     jr z, .endTestPixelCollision
     ; Check tile collision
     ; The X position if offset by 8
     ld a, b
-    sub 8
+    sub OAM_X_OFS
     ld b, a
     ; The Y position if offset by 16
     ld a, c
-    sub 16
+    sub OAM_Y_OFS
     ld c, a
     ; Divide X position by 8
     srl b
