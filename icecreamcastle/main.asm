@@ -11,9 +11,8 @@ INCLUDE "macros.inc"   ; For convenience
 ; --
 
 ; Video RAM
-VRAM_BLOCK_0 EQU _VRAM         ; $8000, used for OAM sprites
-VRAM_BLOCK_1 EQU _VRAM + $800  ; $8800
-VRAM_BLOCK_2 EQU _VRAM + $1000 ; $9000, used for BG tiles
+VRAM_OAM_TILES EQU _VRAM         ; $8000, used for OAM sprites
+VRAM_BG_TILES  EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Hero sprite position in OAM
 HERO_OAM        EQU 1 ; Sprite #1
@@ -34,8 +33,10 @@ HERO_WALK_SPEED_FUDGE EQU %11000000 ; BCD 0.75
 HERO_JUMP_VEL       EQU 2
 HERO_JUMP_VEL_FUDGE EQU %11000000
 
-GRAVITY_SPEED_FUDGE EQU %00100111 ; BCD 0.15234375, increase this amount every frame
-GRAVITY_MAX         EQU 2         ; Terminal velocity, 2 pixels per frame
+GRAVITY_SPEED_FUDGE  EQU %00100111 ; BCD 0.15234375, increase this amount every frame
+GRAVITY_MAX          EQU 2         ; Terminal velocity, 2 pixels per frame
+GRAVITY_OFFSET_FUDGE EQU %11011001 ; Give the Y Fudge a little boost, to
+                                   ; start falling from gravity sooner
 
 ; Background tiles
 TILE_BRICK  EQU 0 ; Bricks have collision detection
@@ -99,7 +100,7 @@ Start:
     call ClearOAM
 
     ; Load background tiles
-    ld hl, VRAM_BLOCK_2
+    ld hl, VRAM_BG_TILES
     ld de, Resources.background
     ld bc, Resources.endBackground - Resources.background
     call CopyMem
@@ -111,7 +112,7 @@ Start:
     call CopyMem
 
     ; Load sprite tiles
-    ld hl, VRAM_BLOCK_0
+    ld hl, VRAM_OAM_TILES
     ld de, Resources.sprites
     ld bc, Resources.endSprites - Resources.sprites
     call CopyMem
@@ -333,7 +334,7 @@ UpdateHero:
     sub GRAVITY_SPEED_FUDGE
     ld [wHeroDYFudge], a
     ld a, [wHeroDY]
-    sbc 0 ; Add the carry bit to DY
+    sbc 0 ; Subtract the carry bit to DY
     ld [wHeroDY], a ; ...and store it
     jr nc, .endGravity ; Check if the velocity has gone below 0
     ; The hero is at the apex of the jump
@@ -370,12 +371,10 @@ UpdateHero:
     ld a, [wHeroDYFudge]
     ld b, a
     ld a, [wHeroYFudge]
-    ; TODO
-    ; SHOULD THIS BE ADD OR SUB???
-    sub b ; (Add DY Fudge to Y Fudge / Subtract DY Fudge from Y Fudge)
+    sub b ; Subtract DY Fudge from Y Fudge
     ld [wHeroYFudge], a ; ...and store it
     ld a, [wHeroDY]
-    adc 0 ; Subtract any carry from fudge
+    adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
 .verticalMovementUpLoop
@@ -462,6 +461,9 @@ UpdateHero:
 .verticalCollisionDown
     xor a ; a = 0
     ld [wHeroDY], a
+    ; This prevents a glitch where you can walk over single tile gaps
+    ; But you travel two pixels shorter than if it was cleared to 0
+    ld a, GRAVITY_OFFSET_FUDGE
     ld [wHeroDYFudge], a
     jr .endVerticalMovement
 .endVerticalMovement
