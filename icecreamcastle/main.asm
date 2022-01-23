@@ -345,6 +345,28 @@ UpdateHero:
     ld [wHeroDYFudge], a
     jr .endGravity
 .addGravityDown
+    ; Only add gravity if the hero isn't on solid ground
+    ; Is the hero on solid ground?
+    ; Collision check
+    ld a, [wHeroX]
+    ld b, a
+    ld a, [wHeroY]
+    inc a ; Test one pixel down
+    ld c, a
+    ld a, DIR_D
+    ld [wHeroDir], a
+    call TestSpriteCollision
+    ; If not standing on anything solid then add gravity
+    jr nz, .ifGravityNothingBelow ; Z set == collision
+    ; Collision check end
+.ifGravityOnSolid
+    ; On solid, clear velocity and skip to the next section
+    xor a ; a = 0
+    ld [wHeroDY], a
+    ld [wHeroDYFudge], a
+    ld [wHeroYFudge], a
+    jr .endGravity
+.ifGravityNothingBelow
     ; The hero is falling down
     ld a, [wHeroDYFudge]
     add GRAVITY_SPEED_FUDGE
@@ -469,6 +491,10 @@ UpdateHero:
 .endVerticalMovement
     
     ; Done updating hero
+    ret
+
+IsHeroCollisionRight:
+
     ret
 
 ; --
@@ -734,130 +760,4 @@ INCBIN "res/tiles-sprites.2bpp"
 .level1
 INCBIN "res/tilemap-level1.map"
 .endLevel1
-
-
-
-
-; --
-; -- OLD UNUSED CODE
-; --
-
-;; --
-;; -- Gameplay
-;; --
-;wCurrLevel: dw ; Points to the address of the current level
-;    ; Set level 1 as the current level
-;    ld hl, wCurrLevel
-;    ld [hl], LOW(Resources.level1)
-;    inc hl
-;    ld [hl], HIGH(Resources.level1)
-
-; Jump info
-;NOT_JUMPING EQU 0
-;IS_JUMPING  EQU 1
-
-;HERO_JUMP_SPEED       EQU %00000010 ; DEC 2
-;HERO_JUMP_SPEED_FUDGE EQU %10001100 ; BCD 0.55 Approx
-
-;    ; UP
-;    ld a, [wKeys]
-;    and PADF_UP
-;    jr nz, .endMoveUp
-;    ; Clear acceleration
-;    xor a ; a = 0
-;    ld [wHeroDY], a
-;    ld [wHeroDYFudge], a
-;    ; Collision check
-;    ld a, [wHeroX]
-;    ld b, a
-;    ld a, [wHeroY]
-;    dec a ; Test one pixel up
-;    ld c, a
-;    ld a, DIR_U
-;    ld [wHeroDir], a
-;    call TestSpriteCollision
-;    jp z, .endGravity ; Collision! Up was pressed, skip gravity
-;    ; Collision check end
-;    ld hl, wHeroY
-;    dec [hl]
-;    jp .endGravity ; Up was pressed, skip gravity
-;.endMoveUp
-
-;.ifOnSolid
-;    ; The hero is standing on solid ground
-;    ; Set jumping parameters
-;    ld a, HERO_JUMP_SPEED_FUDGE
-;    ld [wHeroDYFudge], a
-;    ld a, HERO_JUMP_SPEED
-;    ld [wHeroDY], a
-;    ld a, IS_JUMPING
-;    ld [wHeroJumping], a ; Mark the character as jumping / moving / headed up
-;.endMoveJump
-
-;    ; Jump
-;    ; Move the hero up, if needed
-;.jump
-;    ld a, [wHeroJumping]
-;    cp IS_JUMPING ; Is the hero moving up, aka jumping?
-;    jr nz, .gravity ; ...no, skip jumping, move on to adding gravity
-;.performJump
-;    ; Move Y up DY number of pixels
-;    ; One pixel at a time, testing collision along the way
-;    ld a, [wHeroDYFudge]
-;    ld b, a
-;    ld a, [wHeroYFudge]
-;    sub b ; Subtract DY Fudge from Y Fudge
-;    ld [wHeroYFudge], a ; ...and store it
-;    ld a, [wHeroDY]
-;    sbc 0 ; Subtract any carry from fudge
-;    jr nc, .beginJumpMovementLoop
-;    ; If there was a carry, that means it's time to start going down!
-;    ld a, NOT_JUMPING
-;    xor a ; a = 0
-;    ld [wHeroDY], a
-;    ld [wHeroDYFudge], a
-;    jr .endJump ; Starting to travel down, skip the rest of the jump and go to gravity
-;.beginJumpMovementLoop
-;    ; Move, one pixel at a time
-;    ld b, a ; b is my counter
-;.jumpMovementLoop
-;    ; While b != 0
-;    ;   Check collision one pixel up
-;    ;   If no collision, move one pixel up, dec b
-;    ;   If yes collision, clean DY/Fudge and break
-;    xor a ; a = 0
-;    cp b ; b == 0?
-;    jr z, .endJump
-;    push bc
-;    ; Collision check
-;    ld a, [wHeroX]
-;    ld b, a
-;    ld a, [wHeroY]
-;    dec a ; Test one pixel up
-;    ld c, a
-;    ld a, DIR_U
-;    ld [wHeroDir], a
-;    call TestSpriteCollision
-;    pop bc
-;    jr z, .jumpCollision ; Collision! Skip movement
-;.noJumpCollision
-;    ; Move one pixel up
-;    ld hl, wHeroY
-;    dec [hl]
-;    dec b
-;    jr .jumpMovementLoop
-;.jumpCollision
-;    ; The hero is bonking his head
-;    xor a ; a = 0
-;    ld [wHeroDY], a
-;    ld [wHeroDYFudge], a
-;.endJump
-;    jr .endGravity ; Done with vertical movement, skip adding gravity
-
-;wHeroDX: db      ; X change, per frame
-;wHeroNewX: db    ; X position, where trying to move to
-;wHeroNewY: db    ; Y position, where trying to move to
-;ld [wHeroJumping], a ; NOT_JUMPING == 0
-;wHeroJumping: db ; If the hero is moving in an upwards direction,
-;                 ; NOT_JUMPING (0) for down, IS_JUMPING (1) for up
 
