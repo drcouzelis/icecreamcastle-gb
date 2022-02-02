@@ -85,7 +85,7 @@ SECTION "Header", ROM0[$0100]
 
 Entry_Point:
     nop
-    jp Start
+    jp start
 
 REPT $150 - @
     db 0
@@ -96,65 +96,73 @@ ENDR
 ; --
 SECTION "Game Code", ROM0[$0150]
 
-Start:
-    di ; Disable interrupts during setup
+start:
+    di                       ; Disable interrupts during setup
     call Wait_For_VBlank
 
+_start_init_system:
     xor a
-    ld [rLCDC], a       ; Turn off the screen
+    ld [rLCDC], a            ; Turn off the screen
     ld [wram_vblank_flag], a ; VBlankFlag = 0
-    ld [rSCX], a        ; Set the X...
-    ld [rSCY], a        ; ...and Y position of the background to 0
-    ld [rNR52], a       ; Turn off sound
+    ld [rSCX], a             ; Set the X...
+    ld [rSCY], a             ; ...and Y position of the background to 0
+    ld [rNR52], a            ; Turn off sound
 
     call Clear_OAM
 
+_start_load_background_tiles:
     ; Load background tiles
     ld hl, VRAM_BACKGROUND_TILES
-    ld de, Resources.background
-    ld bc, Resources.end_background - Resources.background
+    ld de, resources.background_tiles
+    ld bc, resources.end_background_tiles - resources.background_tiles
     call Copy_Mem
 
+_start_load_tilemap:
     ; Load background
     ld hl, _SCRN0 ; $9800 ; The top-left corner of the screen
-    ld de, Resources.level_01
-    ld bc, Resources.end_level_01 - Resources.level_01
+    ld de, resources.tilemap_level_01
+    ld bc, resources.end_tilemap_level_01 - resources.tilemap_level_01
     call Copy_Mem
 
+_start_load_sprite_tiles:
     ; Load sprite tiles
     ld hl, VRAM_OAM_TILES
-    ld de, Resources.sprites
-    ld bc, Resources.end_sprites - Resources.sprites
+    ld de, resources.sprite_tiles
+    ld bc, resources.end_sprite_tiles - resources.sprite_tiles
     call Copy_Mem
 
-    ; Load sprites
-    ; The player
+_start_init_player:
     ; Load X Position
     ld a, PLAYER_START_X
     ld [wram_player_x], a
     ; Load Y Position
     ld a, PLAYER_START_Y
     ld [wram_player_y], a
-    ; Reset variables
+    ; Reset player values
     xor a
     ld [wram_player_x_subpixels], a
     ld [wram_player_y_subpixels], a
-    ld [wram_player_facing], a
-    ld [wram_player_jumping], a
+    ld [wram_player_facing], a      ; 0 is facing right
+    ld [wram_player_jumping], a     ; 0 is "not jumping"
+
+    ; Init animation
+    ld a, ANIM_SPEED
+    ld [wram_animation_counter], a
+
+_start_init_player_object:
     ; Set the sprite tile number
     xor a
     ld [PLAYER_OAM_TILEID], a
     ; Set attributes
     ld [PLAYER_OAM_FLAGS], a
-    ; Init animation
-    ld a, ANIM_SPEED
-    ld [wram_animation_counter], a
 
+_start_init_palette:
     ; Init palettes
     ld a, %00011011
     ld [rBGP], a
     ld [rOBP0], a
 
+_start_init_screen:
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
@@ -165,21 +173,21 @@ Start:
 
     ; ...setup complete!
 
-Game_Loop:
+game_loop:
     ld hl, wram_vblank_flag
     xor a
-.wait
-    halt                ; Wait for the VBlank interrupt
-    ;nop ; nop is automatically inserted after halt by rgbasm
+    .wait
+    halt                     ; Wait for the VBlank interrupt
+    ;nop ; nop is automatically inserted after halt by the rgbasm compiler
     cp a, [hl]
     jr z, .wait              ; Wait for the VBlank flag to be set
     ld [wram_vblank_flag], a ; Done waiting! Clear the VBlank flag
 
     ; Time to update the game!
-
     ; Complete all OAM changes first, befor VBlank ends!
 
-    ; Update the screen
+_game_loop_update_player_object:
+    ; Player position
     ld a, [wram_player_x]
     ld [PLAYER_OAM_X], a
     ld a, [wram_player_y]
@@ -189,46 +197,48 @@ Game_Loop:
     ld a, [wram_player_facing]
     ld [PLAYER_OAM_FLAGS], a
 
-    ; Is it time to animate?
+_game_loop_animate:
     ; TODO: Only animate the player when on solid
+    ; Is it time to animate?
     ld hl, wram_animation_counter
     dec [hl]
-    jr nz, .done_animating
+    jr nz, .end
     ; Animate!
-    ld [hl], ANIM_SPEED      ; Reset the animation counter
+    ld [hl], ANIM_SPEED       ; Reset the animation counter
     ld a, [PLAYER_OAM_TILEID]
-    xor a, $01               ; Toggle the animation frame
+    xor a, $01                ; Toggle the animation frame
     ld [PLAYER_OAM_TILEID], a
-.done_animating
+    .end
 
-    call Read_Keys
-    call Update_Player
+    call func_read_keys
+    call func_update_player
 
-    jr Game_Loop
-
-    ; End of the main game loop
+_game_loop_end:
+    jr game_loop
 
 ; --
-; -- Update_Player
+; -- func_update_player
 ; --
 ; -- Move the player based on key input and gravity
 ; --
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-Update_Player:
+func_update_player:
+
+_update_player_right:
     ; RIGHT
     ld a, [wram_keys]
     and PADF_RIGHT
-    jr nz, .end_move_right ; Right is not pressed, try left...
-    ; Move the player to the right!
+    jr nz, .end ; Right is not pressed, skip
+    ; Face right
     xor a
-    ld [wram_player_facing], a ; Face right
+    ld [wram_player_facing], a
     ; Calculate the player's new position
     ld a, [wram_player_x_subpixels]
     add PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
-    jr nc, .end_move_right
+    jr nc, .end
     ; Collision check
     ld a, [wram_player_x]
     inc a ; Test one pixel right
@@ -238,24 +248,26 @@ Update_Player:
     ld a, DIRECTION_RIGHT
     ld [wram_player_direction], a
     call Is_Player_Collision
-    jr z, .end_move_right ; Collision! Skip movement
+    jr z, .end ; Collision! Skip movement
     ; Collision check end
+    ; Move the player right
     ld hl, wram_player_x
-    inc [hl] ; Move the player right
-.end_move_right
+    inc [hl]
+    .end
     
+_update_player_left:
     ; LEFT
     ld a, [wram_keys]
     and PADF_LEFT
-    jr nz, .end_move_left
-    ; Move the player to the left!
+    jr nz, .end ; Left is not pressed, skip
+    ; Face left
     ld a, OAMF_XFLIP
-    ld [wram_player_facing], a ; Face left
+    ld [wram_player_facing], a
     ; Calculate the player's new position
     ld a, [wram_player_x_subpixels]
     sub PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
-    jr nc, .end_move_left
+    jr nc, .end
     ; Collision check
     ld a, [wram_player_x]
     dec a ; Test one pixel left
@@ -265,11 +277,12 @@ Update_Player:
     ld a, DIRECTION_LEFT
     ld [wram_player_direction], a
     call Is_Player_Collision
-    jr z, .end_move_left ; Collision! Skip movement
+    jr z, .end ; Collision! Skip movement
     ; Collision check end
+    ; Move the player left
     ld hl, wram_player_x
-    dec [hl] ; Move the player left
-.end_move_left
+    dec [hl]
+    .end
 
 ;
 ; JUMP / vertical movement algorithm
@@ -590,7 +603,7 @@ Is_Player_Collision_At_Point:
     srl c
     srl c
     ; Load the current level map into hl
-    ld hl, Resources.level_01
+    ld hl, resources.tilemap_level_01
     ; Calculate "pos = (y * 32) + x"
     ld de, 32
 .loop
@@ -677,7 +690,7 @@ Clear_OAM:
     ret
 
 ; --
-; -- Read_Keys
+; -- func_read_keys
 ; --
 ; -- Get the current state of button presses
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
@@ -686,24 +699,26 @@ Clear_OAM:
 ; -- @return wram_keys The eight inputs, 0 means pressed
 ; -- @side a Modified
 ; --
-Read_Keys:
+func_read_keys:
     push hl
     ld hl, wram_keys
+_read_keys_d_pad:
     ; Read D-pad (Down, Up, Left, Right)
     ld a, P1F_GET_DPAD
     ld [rP1], a
-REPT 2            ; Read multiple times to ensure button presses are received
+    REPT 2        ; Read multiple times to ensure button presses are received
     ld a, [rP1]   ; Read the input, 0 means pressed
-ENDR
+    ENDR
     or %11110000
     swap a
     ld [hl], a ; Store the result
+_read_keys_buttons:
     ; Read buttons (Start, Select, B, A)
     ld a, P1F_GET_BTN
     ld [rP1], a
-REPT 6            ; Read multiple times to ensure button presses are received
+    REPT 6        ; Read multiple times to ensure button presses are received
     ld a, [rP1]   ; Read the input, 0 means pressed
-ENDR
+    ENDR
     or %11110000
     ; Combine and store the result
     and [hl]
@@ -772,20 +787,20 @@ wram_player_direction: db
 ; --
 SECTION "Resources", ROM0
 
-Resources:
+resources:
 
 ; Background tiles
-.background
+.background_tiles
 INCBIN "resources/tiles-background.2bpp"
-.end_background
+.end_background_tiles
 
 ; Sprite tiles
-.sprites
+.sprite_tiles
 INCBIN "resources/tiles-sprites.2bpp"
-.end_sprites
+.end_sprite_tiles
 
 ; Map, level 01
-.level_01
+.tilemap_level_01
 INCBIN "resources/tilemap-level-01.map"
-.end_level_01
+.end_tilemap_level_01
 
