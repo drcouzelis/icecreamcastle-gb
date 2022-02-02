@@ -83,7 +83,7 @@ SECTION "VBlank Interrupt", ROM0[$0040]
 ; --
 SECTION "Header", ROM0[$0100]
 
-Entry_Point:
+entry_point:
     nop
     jp start
 
@@ -100,7 +100,7 @@ start:
     di                       ; Disable interrupts during setup
     call Wait_For_VBlank
 
-_start_init_system:
+_start__init_system:
     xor a
     ld [rLCDC], a            ; Turn off the screen
     ld [wram_vblank_flag], a ; VBlankFlag = 0
@@ -110,28 +110,28 @@ _start_init_system:
 
     call Clear_OAM
 
-_start_load_background_tiles:
+_start__load_background_tiles:
     ; Load background tiles
     ld hl, VRAM_BACKGROUND_TILES
     ld de, resources.background_tiles
     ld bc, resources.end_background_tiles - resources.background_tiles
     call Copy_Mem
 
-_start_load_tilemap:
+_start__load_tilemap:
     ; Load background
     ld hl, _SCRN0 ; $9800 ; The top-left corner of the screen
     ld de, resources.tilemap_level_01
     ld bc, resources.end_tilemap_level_01 - resources.tilemap_level_01
     call Copy_Mem
 
-_start_load_sprite_tiles:
+_start__load_sprite_tiles:
     ; Load sprite tiles
     ld hl, VRAM_OAM_TILES
     ld de, resources.sprite_tiles
     ld bc, resources.end_sprite_tiles - resources.sprite_tiles
     call Copy_Mem
 
-_start_init_player:
+_start__init_player:
     ; Load X Position
     ld a, PLAYER_START_X
     ld [wram_player_x], a
@@ -149,20 +149,20 @@ _start_init_player:
     ld a, ANIM_SPEED
     ld [wram_animation_counter], a
 
-_start_init_player_object:
+_start__init_player_object:
     ; Set the sprite tile number
     xor a
     ld [PLAYER_OAM_TILEID], a
     ; Set attributes
     ld [PLAYER_OAM_FLAGS], a
 
-_start_init_palette:
+_start__init_palette:
     ; Init palettes
     ld a, %00011011
     ld [rBGP], a
     ld [rOBP0], a
 
-_start_init_screen:
+_start__init_screen:
     ; Turn screen on, display the background
     ld a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
@@ -186,7 +186,7 @@ game_loop:
     ; Time to update the game!
     ; Complete all OAM changes first, befor VBlank ends!
 
-_game_loop_update_player_object:
+_game_loop__update_player_object:
     ; Player position
     ld a, [wram_player_x]
     ld [PLAYER_OAM_X], a
@@ -197,7 +197,7 @@ _game_loop_update_player_object:
     ld a, [wram_player_facing]
     ld [PLAYER_OAM_FLAGS], a
 
-_game_loop_animate:
+_game_loop__animate:
     ; TODO: Only animate the player when on solid
     ; Is it time to animate?
     ld hl, wram_animation_counter
@@ -210,23 +210,52 @@ _game_loop_animate:
     ld [PLAYER_OAM_TILEID], a
     .end
 
-    call func_read_keys
-    call func_update_player
+    call read_keys
+    call update_player
 
-_game_loop_end:
+_game_loop__end:
     jr game_loop
 
 ; --
-; -- func_update_player
+; -- IS_PLAYER_COLLISION_IN
+; --
+; -- Test if the player is able to one pixel in
+; -- the given direction without collision with
+; -- the map
+; --
+; -- @param \1 One of the four directions
+; --
+MACRO IS_PLAYER_COLLISION_IN
+    ld a, [wram_player_x]
+IF \1 == DIRECTION_LEFT
+    dec a
+ELIF \1 == DIRECTION_RIGHT
+    inc a
+ENDC
+    ld b, a
+    ld a, [wram_player_y]
+IF \1 == DIRECTION_UP
+    dec a
+ELIF \1 == DIRECTION_DOWN
+    inc a
+ENDC
+    ld c, a
+    ld a, \1
+    ld [wram_player_direction], a
+    call Is_Player_Collision
+ENDM
+
+; --
+; -- update_player
 ; --
 ; -- Move the player based on key input and gravity
 ; --
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-func_update_player:
+update_player:
 
-_update_player_right:
+_update_player__move_right:
     ; RIGHT
     ld a, [wram_keys]
     and PADF_RIGHT
@@ -239,23 +268,14 @@ _update_player_right:
     add PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
     jr nc, .end
-    ; Collision check
-    ld a, [wram_player_x]
-    inc a ; Test one pixel right
-    ld b, a
-    ld a, [wram_player_y]
-    ld c, a
-    ld a, DIRECTION_RIGHT
-    ld [wram_player_direction], a
-    call Is_Player_Collision
-    jr z, .end ; Collision! Skip movement
-    ; Collision check end
+    IS_PLAYER_COLLISION_IN DIRECTION_RIGHT
+    jr z, .end
     ; Move the player right
     ld hl, wram_player_x
     inc [hl]
     .end
     
-_update_player_left:
+_update_player__move_left:
     ; LEFT
     ld a, [wram_keys]
     and PADF_LEFT
@@ -268,17 +288,8 @@ _update_player_left:
     sub PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
     jr nc, .end
-    ; Collision check
-    ld a, [wram_player_x]
-    dec a ; Test one pixel left
-    ld b, a
-    ld a, [wram_player_y]
-    ld c, a
-    ld a, DIRECTION_LEFT
-    ld [wram_player_direction], a
-    call Is_Player_Collision
-    jr z, .end ; Collision! Skip movement
-    ; Collision check end
+    IS_PLAYER_COLLISION_IN DIRECTION_LEFT
+    jr z, .end
     ; Move the player left
     ld hl, wram_player_x
     dec [hl]
@@ -312,26 +323,15 @@ _update_player_left:
 ; N -> Move the player DOWN according to DY
 ;
 
+_update_player__button_a:
     ; JUMP / A
     ld a, [wram_keys]
     and PADF_A
-    jr nz, .end_jump_input ; Z set == A button pressed
+    jr nz, .end
     ; Jump button was pressed!
-    ; Try to jump!
-    ; Is the player on solid ground?
-    ; Collision check
-    ld a, [wram_player_x]
-    ld b, a
-    ld a, [wram_player_y]
-    inc a ; Test one pixel down
-    ld c, a
-    ld a, DIRECTION_DOWN
-    ld [wram_player_direction], a
-    call Is_Player_Collision
     ; If not standing on anything solid then ignore the jump button
-    jr nz, .end_jump_input ; Z set == collision
-    ; Collision check end
-.ifOnSolid
+    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
+    jr nz, .end
     ; The player is standing on solid ground
     ; Set jumping parameters
     ld a, 1
@@ -343,46 +343,39 @@ _update_player_left:
     ; Clear any leftover movement fudge, for consistent jumping
     xor a
     ld [wram_player_y_subpixels], a
-.end_jump_input
+    .end
     
+_update_player__add_gravity:
     ; Gravity
     ; Add gravity to DY every frame
     ; This section ONLY changes velocity, NOT the actual Y position
-.add_gravity
     ld a, [wram_player_jumping]
     cp 0 ; Is the player jumping?
-    jr z, .add_gravity_down
-.add_gravity_up
+    jr z, _update_player__add_gravity_down
+
+_update_player__add_gravity_up:
     ; The player is jumping up
     ld a, [wram_player_dy_subpixels]
     sub GRAVITY_SPEED_SUBPIXELS
     ld [wram_player_dy_subpixels], a
     ld a, [wram_player_dy]
-    sbc 0 ; Subtract the carry bit to DY
+    sbc 0 ; Subtract the carry bit from DY
     ld [wram_player_dy], a ; ...and store it
-    jr nc, .end_add_gravity ; Check if the velocity has gone below 0
+    ; Check if the upward velocity has gone below 0...
+    jr nc, _update_player__end_add_gravity
     ; The player is at the apex of the jump
     ; Clear the velocity and start falling
     xor a
     ld [wram_player_jumping], a
     ld [wram_player_dy], a
     ld [wram_player_dy_subpixels], a
-    jr .end_add_gravity
-.add_gravity_down
+    jr _update_player__end_add_gravity
+
+_update_player__add_gravity_down:
     ; Only add gravity if the player isn't on solid ground
-    ; Is the player on solid ground?
-    ; Collision check
-    ld a, [wram_player_x]
-    ld b, a
-    ld a, [wram_player_y]
-    inc a ; Test one pixel down
-    ld c, a
-    ld a, DIRECTION_DOWN
-    ld [wram_player_direction], a
-    call Is_Player_Collision
+    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
     ; If not standing on anything solid then add gravity
     jr nz, .add_gravity_nothing_below ; Z set == collision
-    ; Collision check end
 .add_gravity_on_solid
     ; On solid, clear velocity and skip to the next section
     xor a
@@ -390,7 +383,7 @@ _update_player_left:
     ld [wram_player_dy], a
     ld a, GRAVITY_OFFSET_SUBPIXELS
     ld [wram_player_dy_subpixels], a
-    jr .end_add_gravity
+    jr _update_player__end_add_gravity
 .add_gravity_nothing_below
     ; The player is falling down
     ld a, [wram_player_dy_subpixels]
@@ -402,12 +395,13 @@ _update_player_left:
     ; Test for terminal velocity here!
     ; Don't go faster than terminal velocity
     cp a, GRAVITY_MAX_SPEED
-    jr c, .end_add_gravity ; Not maxed out
+    jr c, _update_player__end_add_gravity ; Not maxed out
 .max_gravity
-    ld [wram_player_dy], a ; Cap the speed to GRAVITY_MAX_SPEED
+    ; Cap the speed to GRAVITY_MAX_SPEED
+    ld [wram_player_dy], a
     xor a
     ld [wram_player_dy_subpixels], a ; Zero out fudge
-.end_add_gravity
+_update_player__end_add_gravity:
 
 .vertical_movement
     ld a, [wram_player_jumping]
@@ -433,16 +427,7 @@ _update_player_left:
     cp b ; b == 0?
     jr z, .end_vertical_movement
     push bc
-    ; Collision check
-    ld a, [wram_player_x]
-    ld b, a
-    ld a, [wram_player_y]
-    dec a ; Test one pixel up
-    ld c, a
-    ld a, DIRECTION_UP
-    ld [wram_player_direction], a
-    call Is_Player_Collision
-    ; Collision check end
+    IS_PLAYER_COLLISION_IN DIRECTION_UP
     pop bc
     jr z, .verticalCollisionUp ; Collision! Skip movement
 .noVerticalCollisionUp
@@ -488,15 +473,7 @@ _update_player_left:
     cp b ; b == 0?
     jr z, .end_vertical_movement
     push bc
-    ; Collision check
-    ld a, [wram_player_x]
-    ld b, a
-    ld a, [wram_player_y]
-    inc a ; Test one pixel down
-    ld c, a
-    ld a, DIRECTION_DOWN
-    ld [wram_player_direction], a
-    call Is_Player_Collision
+    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
     pop bc
     jr z, .verticalCollisionDown ; Collision! Skip movement
 .noVerticalCollisionDown
@@ -690,7 +667,7 @@ Clear_OAM:
     ret
 
 ; --
-; -- func_read_keys
+; -- read_keys
 ; --
 ; -- Get the current state of button presses
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
@@ -699,7 +676,7 @@ Clear_OAM:
 ; -- @return wram_keys The eight inputs, 0 means pressed
 ; -- @side a Modified
 ; --
-func_read_keys:
+read_keys:
     push hl
     ld hl, wram_keys
 _read_keys_d_pad:
