@@ -130,22 +130,7 @@ _start__load_sprite_tiles:
     call copy_mem
 
 _start__init_player:
-    ; Load X Position
-    ld a, PLAYER_START_X
-    ld [wram_player_x], a
-    ; Load Y Position
-    ld a, PLAYER_START_Y
-    ld [wram_player_y], a
-    ; Reset player values
-    xor a
-    ld [wram_player_x_subpixels], a
-    ld [wram_player_y_subpixels], a
-    ld [wram_player_facing], a      ; 0 is facing right
-    ld [wram_player_jumping], a     ; 0 is "not jumping"
-
-    ; Init animation
-    ld a, ANIM_SPEED
-    ld [wram_animation_counter], a
+    call reset_level
 
 _start__init_player_object:
     ; Set the sprite tile number
@@ -174,7 +159,7 @@ _start__init_screen:
 game_loop:
     ld hl, wram_vblank_flag
     xor a
-    .wait
+.wait
     halt                     ; Wait for the VBlank interrupt
     ;nop ; nop is automatically inserted after halt by the rgbasm compiler
     cp a, [hl]
@@ -206,13 +191,51 @@ _game_loop__animate:
     ld a, [PLAYER_OAM_TILEID]
     xor a, $01                ; Toggle the animation frame
     ld [PLAYER_OAM_TILEID], a
-    .end
+.end
 
     call read_keys
     call update_player
+    call check_collisions_with_spikes
+    ;call update_enemies
+
+    ; Did the player die?
+    ld a, [wram_player_dead]
+    cp 1
+    jr nz, _game_loop__end
+
+_game_loop__player_died:
+    call reset_level
 
 _game_loop__end:
     jr game_loop
+
+; --
+; -- reset_level
+; --
+; -- Reset the current level
+; --
+; -- @side a Modified
+; --
+reset_level:
+    ; Load X Position
+    ld a, PLAYER_START_X
+    ld [wram_player_x], a
+    ; Load Y Position
+    ld a, PLAYER_START_Y
+    ld [wram_player_y], a
+    ; Reset player values
+    xor a
+    ld [wram_player_x_subpixels], a
+    ld [wram_player_y_subpixels], a
+    ld [wram_player_facing], a      ; 0 is facing right
+    ld [wram_player_jumping], a     ; 0 is "not jumping"
+    ; Init animation
+    ld a, ANIM_SPEED
+    ld [wram_animation_counter], a
+    ; Revive the player
+    xor a
+    ld [wram_player_dead], a
+    ret
 
 ; --
 ; -- TEST_PLAYER_COLLISION_GOING
@@ -271,7 +294,7 @@ _update_player__move_right:
     ; Move the player right
     ld hl, wram_player_x
     inc [hl]
-    .end
+.end
     
 _update_player__move_left:
     ; LEFT
@@ -291,7 +314,7 @@ _update_player__move_left:
     ; Move the player left
     ld hl, wram_player_x
     dec [hl]
-    .end
+.end
 
 ;
 ; JUMP / vertical movement algorithm
@@ -341,7 +364,7 @@ _update_player__button_a:
     ; Clear any leftover movement fudge, for consistent jumping
     xor a
     ld [wram_player_y_subpixels], a
-    .end
+.end
     
 _update_player__add_gravity:
     ; Gravity
@@ -428,7 +451,7 @@ _update_player__vertical_movement_up:
     ;   Check collision one pixel up
     ;   If no collision, move one pixel up, dec b
     ;   If yes collision, clear DY/Fudge and break
-    .loop
+.loop
     xor a
     cp b ; b == 0?
     jr z, _update_player__end_vertical_movement
@@ -474,7 +497,7 @@ _update_player__vertical_movement_down:
     ;   Check collision one pixel down
     ;   If no collision, move one pixel down, dec b
     ;   If yes collision, clear DY/Fudge and break
-    .loop
+.loop
     xor a
     cp b ; b == 0?
     jr z, _update_player__end_vertical_movement
@@ -581,14 +604,14 @@ test_player_collision_at_point:
     ld hl, resources.tilemap_level_01
     ; Calculate "pos = (y * 32) + x"
     ld de, 32
-    .loop
+.loop
     xor a
     or c
     jr z, .end_loop ; Y position == 0?
     add hl, de      ; Add a row of tile addresses (looped)
     dec c
     jr .loop
-    .end_loop
+.end_loop
     ld c, b
     ld b, a    ; bc now == b, the X position
     add hl, bc ; Add X position
@@ -603,22 +626,117 @@ test_player_collision_at_point:
     jr nz, .end ; ...no! Test for spike collision...
     ld a, TILE_SPIKES
     cp [hl] ; Collision with spikes going up, left, right? If yes, set z
-    .end
+.end
     pop de
     pop bc
     pop hl
     ret
 
+MACRO DIVIDE_BY_8
+    srl \1
+    srl \1
+    srl \1
+ENDM
+
 ; --
-; -- test_player_hit
+; -- test_player_collision
 ; --
-; -- Test for player and enemy collisions
+; -- Test for collision of an 8x8 tile with a background map tile
 ; --
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-test_player_hit:
-    ; TODO
+check_collisions_with_spikes:
+    push bc
+    ; Upper-left pixel
+    ld a, [wram_player_x]
+    ld b, a
+    ld a, [wram_player_y]
+    ld c, a
+    call check_collisions_with_spikes_at_point
+    jr z, .end
+    ; Upper-right pixel
+    ; c is already set to the needed Y position
+    ld a, b
+    add 7
+    ld b, a
+    call check_collisions_with_spikes_at_point
+    jr z, .end
+    ; Lower-right pixel
+    ; b is already set to the needed X position
+    ld a, c
+    add 7
+    ld c, a
+    call check_collisions_with_spikes_at_point
+    jr z, .end
+    ; Lower-left pixel
+    ; c is already set to the needed Y position
+    ld a, b
+    sub 7
+    ld b, a
+    call check_collisions_with_spikes_at_point
+.end
+    pop bc
+    ret
+
+; --
+; -- check_collisions_with_spikes_at_point
+; --
+; -- Test for player and enemy collisions at the player's current position
+; --
+; -- @param b X position to check
+; -- @param c Y position to check
+; -- @return z Set if collision
+; -- @side a Modified
+; --
+check_collisions_with_spikes_at_point:
+    push hl
+    push bc
+    push de
+    ; Check collision with spikes
+    ; The X position if offset by 8
+    ld a, b
+    sub OAM_X_OFS
+    ld b, a
+    ; The Y position if offset by 16
+    ld a, c
+    sub OAM_Y_OFS
+    ld c, a
+    ; Divide X position by 8
+    DIVIDE_BY_8 b
+    ; Divide Y position by 8
+    DIVIDE_BY_8 c
+    ; Load the current level map into hl
+    ld hl, resources.tilemap_level_01
+    ; Calculate "pos = (y * 32) + x"
+    ld de, 32
+.loop
+    xor a
+    or c
+    jr z, .end_loop ; Y position == 0?
+    add hl, de      ; Add a row of tile addresses (looped)
+    dec c
+    jr .loop
+.end_loop
+    ld c, b
+    ld b, a    ; bc now == b, the X position
+    add hl, bc ; Add X position
+    ; The background tile we need is now in hl
+    ld a, TILE_SPIKES
+    cp [hl] ; Collision with spikes going up, left, right? If yes, set z
+    jr nz, .end
+    ; Player hit spikes!
+    call player_killed
+.end
+    pop de
+    pop bc
+    pop hl
+    ret
+
+player_killed:
+    ld a, 1
+    ld [wram_player_dead], a
+    ret
 
 ; --
 ; -- wait_for_vblank
@@ -663,7 +781,7 @@ clear_oam:
     ld hl, _OAMRAM
     ld b, OAM_COUNT * sizeof_OAM_ATTRS ; 40 sprites, 4 bytes each
     xor a
-    .loop
+.loop
     ldi [hl], a
     dec b
     jr nz, .loop
@@ -749,6 +867,8 @@ wram_player_jumping: db
 ; Can change mid-frame, for example, when jumping to the right
 ; Used when moving pixel by pixel
 wram_player_direction: db
+
+wram_player_dead: db
 
 ; --
 ; -- Enemies

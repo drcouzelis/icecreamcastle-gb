@@ -16,7 +16,7 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
 - [x] Physics / gravity
 - [x] Jumping
 - [ ] Change variables / fudges to words (two bytes)
-- [ ] Add spikes collision / death / restart
+- [x] Add spikes collision / death / restart
 - [ ] Add laser enemies
 - [ ] Add saw enemies
 - [ ] Tries counter
