@@ -32,9 +32,7 @@ GRAVITY_MAX_SPEED EQU 2 ; 2 pixels per frame
 ; to start "falling" from gravity more quickly
 ; This fixes an issue where the player can walk accross
 ; single tile sized gaps
-GRAVITY_OFFSET_SUBPIXELS EQU %11011001 ; Give the Y Fudge a little boost, to
-                                       ; start falling from gravity sooner
-                                       ; 1.0 - GRAVITY_SPEED_SUBPIXELS
+GRAVITY_OFFSET_SUBPIXELS EQU %11011001 ; 1.0 - GRAVITY_SPEED_SUBPIXELS
 
 ; Directions
 DIRECTION_UP    EQU %00000001
@@ -98,7 +96,7 @@ SECTION "Game Code", ROM0[$0150]
 
 start:
     di                       ; Disable interrupts during setup
-    call Wait_For_VBlank
+    call wait_for_vblank
 
 _start__init_system:
     xor a
@@ -108,28 +106,28 @@ _start__init_system:
     ld [rSCY], a             ; ...and Y position of the background to 0
     ld [rNR52], a            ; Turn off sound
 
-    call Clear_OAM
+    call clear_oam
 
 _start__load_background_tiles:
     ; Load background tiles
     ld hl, VRAM_BACKGROUND_TILES
     ld de, resources.background_tiles
     ld bc, resources.end_background_tiles - resources.background_tiles
-    call Copy_Mem
+    call copy_mem
 
 _start__load_tilemap:
     ; Load background
     ld hl, _SCRN0 ; $9800 ; The top-left corner of the screen
     ld de, resources.tilemap_level_01
     ld bc, resources.end_tilemap_level_01 - resources.tilemap_level_01
-    call Copy_Mem
+    call copy_mem
 
 _start__load_sprite_tiles:
     ; Load sprite tiles
     ld hl, VRAM_OAM_TILES
     ld de, resources.sprite_tiles
     ld bc, resources.end_sprite_tiles - resources.sprite_tiles
-    call Copy_Mem
+    call copy_mem
 
 _start__init_player:
     ; Load X Position
@@ -217,7 +215,7 @@ _game_loop__end:
     jr game_loop
 
 ; --
-; -- IS_PLAYER_COLLISION_IN
+; -- TEST_PLAYER_COLLISION_GOING
 ; --
 ; -- Test if the player is able to one pixel in
 ; -- the given direction without collision with
@@ -225,7 +223,7 @@ _game_loop__end:
 ; --
 ; -- @param \1 One of the four directions
 ; --
-MACRO IS_PLAYER_COLLISION_IN
+MACRO TEST_PLAYER_COLLISION_GOING
     ld a, [wram_player_x]
 IF \1 == DIRECTION_LEFT
     dec a
@@ -242,7 +240,7 @@ ENDC
     ld c, a
     ld a, \1
     ld [wram_player_direction], a
-    call Is_Player_Collision
+    call test_player_collision
 ENDM
 
 ; --
@@ -268,7 +266,7 @@ _update_player__move_right:
     add PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
     jr nc, .end
-    IS_PLAYER_COLLISION_IN DIRECTION_RIGHT
+    TEST_PLAYER_COLLISION_GOING DIRECTION_RIGHT
     jr z, .end
     ; Move the player right
     ld hl, wram_player_x
@@ -288,7 +286,7 @@ _update_player__move_left:
     sub PLAYER_WALK_SPEED_SUBPIXELS
     ld [wram_player_x_subpixels], a
     jr nc, .end
-    IS_PLAYER_COLLISION_IN DIRECTION_LEFT
+    TEST_PLAYER_COLLISION_GOING DIRECTION_LEFT
     jr z, .end
     ; Move the player left
     ld hl, wram_player_x
@@ -330,7 +328,7 @@ _update_player__button_a:
     jr nz, .end
     ; Jump button was pressed!
     ; If not standing on anything solid then ignore the jump button
-    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
+    TEST_PLAYER_COLLISION_GOING DIRECTION_DOWN
     jr nz, .end
     ; The player is standing on solid ground
     ; Set jumping parameters
@@ -373,18 +371,22 @@ _update_player__add_gravity_up:
 
 _update_player__add_gravity_down:
     ; Only add gravity if the player isn't on solid ground
-    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
+    TEST_PLAYER_COLLISION_GOING DIRECTION_DOWN
     ; If not standing on anything solid then add gravity
-    jr nz, .add_gravity_nothing_below ; Z set == collision
-.add_gravity_on_solid
+    jr nz, _update_player__add_gravity_nothing_below
+
+_update_player__add_gravity_on_solid:
     ; On solid, clear velocity and skip to the next section
     xor a
     ld [wram_player_y_subpixels], a
     ld [wram_player_dy], a
+    ;; This prevents a glitch where you can walk over single tile gaps
+    ;; But you travel two pixels shorter than if it was cleared to 0
     ld a, GRAVITY_OFFSET_SUBPIXELS
     ld [wram_player_dy_subpixels], a
     jr _update_player__end_add_gravity
-.add_gravity_nothing_below
+
+_update_player__add_gravity_nothing_below:
     ; The player is falling down
     ld a, [wram_player_dy_subpixels]
     add GRAVITY_SPEED_SUBPIXELS
@@ -396,18 +398,21 @@ _update_player__add_gravity_down:
     ; Don't go faster than terminal velocity
     cp a, GRAVITY_MAX_SPEED
     jr c, _update_player__end_add_gravity ; Not maxed out
-.max_gravity
+
+_update_player__at_max_gravity:
     ; Cap the speed to GRAVITY_MAX_SPEED
     ld [wram_player_dy], a
     xor a
     ld [wram_player_dy_subpixels], a ; Zero out fudge
+
 _update_player__end_add_gravity:
 
-.vertical_movement
+_update_player__vertical_movement:
     ld a, [wram_player_jumping]
     cp 0 ; Is the player jumping?
-    jr z, .vertical_movement_down
-.vertical_movement_up
+    jr z, _update_player__vertical_movement_down
+
+_update_player__vertical_movement_up:
     ; The player is jumping up
     ld a, [wram_player_dy_subpixels]
     ld b, a
@@ -418,25 +423,26 @@ _update_player__end_add_gravity:
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
-.vertical_movement_up_loop
+
     ; While b != 0
     ;   Check collision one pixel up
     ;   If no collision, move one pixel up, dec b
     ;   If yes collision, clear DY/Fudge and break
+    .loop
     xor a
     cp b ; b == 0?
-    jr z, .end_vertical_movement
+    jr z, _update_player__end_vertical_movement
     push bc
-    IS_PLAYER_COLLISION_IN DIRECTION_UP
+    TEST_PLAYER_COLLISION_GOING DIRECTION_UP
     pop bc
-    jr z, .verticalCollisionUp ; Collision! Skip movement
-.noVerticalCollisionUp
+    jr z, _update_player__vertical_collision_up ; Collision! Skip movement
     ; Move one pixel up
     ld hl, wram_player_y
     dec [hl]
     dec b
-    jr .vertical_movement_up_loop
-.verticalCollisionUp
+    jr .loop
+
+_update_player__vertical_collision_up:
     ; Head bonk!
     ; The player bonked his head!
     ; Cancel the jump
@@ -444,9 +450,9 @@ _update_player__end_add_gravity:
     ld [wram_player_jumping], a
     ld [wram_player_dy], a
     ld [wram_player_dy_subpixels], a
-    jr .end_vertical_movement
+    jr _update_player__end_vertical_movement
 
-.vertical_movement_down
+_update_player__vertical_movement_down:
     ; The player is falling down
     ;
     ; Move Y down DY number of pixels
@@ -464,38 +470,30 @@ _update_player__end_add_gravity:
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
-.verticalMovementDownLoop
     ; While b != 0
     ;   Check collision one pixel down
     ;   If no collision, move one pixel down, dec b
     ;   If yes collision, clear DY/Fudge and break
+    .loop
     xor a
     cp b ; b == 0?
-    jr z, .end_vertical_movement
+    jr z, _update_player__end_vertical_movement
     push bc
-    IS_PLAYER_COLLISION_IN DIRECTION_DOWN
+    TEST_PLAYER_COLLISION_GOING DIRECTION_DOWN
     pop bc
-    jr z, .verticalCollisionDown ; Collision! Skip movement
-.noVerticalCollisionDown
+    jr z, _update_player__end_vertical_movement ; Collision! Skip movement
     ; Move one pixel down
     ld hl, wram_player_y
     inc [hl]
     dec b
-    jr .verticalMovementDownLoop
-.verticalCollisionDown
-    xor a
-    ld [wram_player_dy], a
-    ; This prevents a glitch where you can walk over single tile gaps
-    ; But you travel two pixels shorter than if it was cleared to 0
-    ld a, GRAVITY_OFFSET_SUBPIXELS
-    ld [wram_player_dy_subpixels], a
-.end_vertical_movement
-    
+    jr .loop
+
+_update_player__end_vertical_movement:
     ; Done updating player
     ret
 
 ; --
-; -- Is_Player_Collision
+; -- test_player_collision
 ; --
 ; -- Test for collision of an 8x8 tile with a background map tile
 ; --
@@ -504,36 +502,36 @@ _update_player__end_add_gravity:
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-Is_Player_Collision:
+test_player_collision:
     ; Upper-left pixel
     ; b is already set to the needed X position
     ; c is already set to the needed Y position
-    call Is_Player_Collision_At_Point
+    call test_player_collision_at_point
     ret z
     ; Upper-right pixel
     ; c is already set to the needed Y position
     ld a, b
     add 7
     ld b, a
-    call Is_Player_Collision_At_Point
+    call test_player_collision_at_point
     ret z
     ; Lower-right pixel
     ; b is already set to the needed X position
     ld a, c
     add 7
     ld c, a
-    call Is_Player_Collision_At_Point
+    call test_player_collision_at_point
     ret z
     ; Lower-left pixel
     ; c is already set to the needed Y position
     ld a, b
     sub 7
     ld b, a
-    call Is_Player_Collision_At_Point
+    call test_player_collision_at_point
     ret ; Just return the answer
 
 ; --
-; -- Is_Player_Collision_At_Point
+; -- test_player_collision_at_point
 ; --
 ; -- Test for collision of a pixel with a background map tile
 ; -- or the edge of the screen
@@ -545,7 +543,7 @@ Is_Player_Collision:
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-Is_Player_Collision_At_Point:
+test_player_collision_at_point:
     push hl
     push bc
     push de
@@ -583,14 +581,14 @@ Is_Player_Collision_At_Point:
     ld hl, resources.tilemap_level_01
     ; Calculate "pos = (y * 32) + x"
     ld de, 32
-.loop
+    .loop
     xor a
     or c
     jr z, .end_loop ; Y position == 0?
     add hl, de      ; Add a row of tile addresses (looped)
     dec c
     jr .loop
-.end_loop
+    .end_loop
     ld c, b
     ld b, a    ; bc now == b, the X position
     add hl, bc ; Add X position
@@ -605,31 +603,36 @@ Is_Player_Collision_At_Point:
     jr nz, .end ; ...no! Test for spike collision...
     ld a, TILE_SPIKES
     cp [hl] ; Collision with spikes going up, left, right? If yes, set z
-.end
+    .end
     pop de
     pop bc
     pop hl
     ret
 
-Is_Player_On_Solid:
-    ; TODO
-
-Is_Player_Hit:
+; --
+; -- test_player_hit
+; --
+; -- Test for player and enemy collisions
+; --
+; -- @return z Set if collision
+; -- @side a Modified
+; --
+test_player_hit:
     ; TODO
 
 ; --
-; -- Wait_For_VBlank
+; -- wait_for_vblank
 ; --
 ; -- @side a Modified
 ; --
-Wait_For_VBlank:
+wait_for_vblank:
     ld a, [rLY] ; Is the Screen Y coordinate...
     cp SCRN_Y   ; ...done drawing the screen?
-    jr nz, Wait_For_VBlank
+    jr nz, wait_for_vblank
     ret
 
 ; --
-; -- Copy_Mem
+; -- copy_mem
 ; --
 ; -- Copy memory from one section to another
 ; --
@@ -638,14 +641,14 @@ Wait_For_VBlank:
 ; -- @param bc The number of bytes to copy
 ; -- @side a, bc, de, hl Modified
 ; --
-Copy_Mem:
+copy_mem:
     ld a, [de]  ; Grab 1 byte from the source
     ldi [hl], a ; Place it at the destination, incrementing hl
     inc de      ; Move to the next byte
     dec bc      ; Decrement count
     ld a, b     ; 'dec bc' doesn't update flags, so this line...
     or c        ; ...and this line check if bc is 0
-    jr nz, Copy_Mem
+    jr nz, copy_mem
     ret
 
 ; --
@@ -656,11 +659,11 @@ Copy_Mem:
 ; --
 ; -- @side a, b, hl Modified
 ; --
-Clear_OAM:
+clear_oam:
     ld hl, _OAMRAM
     ld b, OAM_COUNT * sizeof_OAM_ATTRS ; 40 sprites, 4 bytes each
     xor a
-.loop
+    .loop
     ldi [hl], a
     dec b
     jr nz, .loop
@@ -679,7 +682,7 @@ Clear_OAM:
 read_keys:
     push hl
     ld hl, wram_keys
-_read_keys_d_pad:
+_read_keys__d_pad:
     ; Read D-pad (Down, Up, Left, Right)
     ld a, P1F_GET_DPAD
     ld [rP1], a
@@ -689,7 +692,7 @@ _read_keys_d_pad:
     or %11110000
     swap a
     ld [hl], a ; Store the result
-_read_keys_buttons:
+_read_keys__buttons:
     ; Read buttons (Start, Select, B, A)
     ld a, P1F_GET_BTN
     ld [rP1], a
