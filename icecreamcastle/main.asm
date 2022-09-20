@@ -70,11 +70,18 @@ VRAM_OAM_TILES        EQU _VRAM         ; $8000, used for OAM sprites
 VRAM_BACKGROUND_TILES EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Player sprite position in OAM
-PLAYER_OAM        EQU 1 ; Sprite #1
-PLAYER_OAM_TILEID EQU (PLAYER_OAM*_OAMRAM)+OAMA_TILEID
-PLAYER_OAM_X      EQU (PLAYER_OAM*_OAMRAM)+OAMA_X
-PLAYER_OAM_Y      EQU (PLAYER_OAM*_OAMRAM)+OAMA_Y
-PLAYER_OAM_FLAGS  EQU (PLAYER_OAM*_OAMRAM)+OAMA_FLAGS
+PLAYER_OAM        EQU 0*sizeof_OAM_ATTRS ; The first sprite in the list
+PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
+PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
+PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
+PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
+
+; Target sprite position in OAM
+TARGET_OAM        EQU 2*sizeof_OAM_ATTRS
+TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
+TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
+TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
+TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -176,6 +183,16 @@ _start__init_player_object:
     ; Set attributes
     ld   [PLAYER_OAM_FLAGS], a
 
+_start__init_target_object:
+    ld   a, 2 ; The target image location in VRAM
+    ld   [TARGET_OAM_TILEID], a
+    ld   a, 8*16
+    ld   [TARGET_OAM_X], a
+    ld   a, 8*7
+    ld   [TARGET_OAM_Y], a
+    xor  a
+    ld   [TARGET_OAM_FLAGS], a
+
 _start__init_palette:
     ; Init palettes
     ld   a, %00011011
@@ -250,6 +267,9 @@ _game_loop__animate:
     ; Toggle the animation frame for the player
     xor  a, $01
     ld   [PLAYER_OAM_TILEID], a
+    ; ...and the target
+    add  2 ; The target sprites start at location 2
+    ld   [TARGET_OAM_TILEID], a
 .end
 
     ; Get player input
@@ -1024,6 +1044,34 @@ wram_keys: db
 ; -- Player
 ; --
 
+wram_player:
+
+    ; Player X position
+    .x:           db
+    .x_subpixels: db
+
+    ; Player Y position
+    .y:           db
+    .y_subpixels: db
+
+    ; Player Y speed
+    .dy:           db
+    .dy_subpixels: db
+
+    ; The direction the player is facing, 0 for right, OAMF_XFLIP for left
+    .facing: db
+
+    ; Set if the player is currently jumping up (moving in an upwards motion)
+    .jumping: db
+
+    ; The direction the player is currently moving (U, D, L, R)
+    ; Can change mid-frame, for example, when jumping to the right
+    ; Used when moving pixel by pixel
+    .direction: db
+
+    ; Set to 1 if the player is dead
+    .dead: db
+
 ; Player X position
 wram_player_x:           db
 wram_player_x_subpixels: db
@@ -1047,6 +1095,7 @@ wram_player_jumping: db
 ; Used when moving pixel by pixel
 wram_player_direction: db
 
+; Set to 1 if the player is dead
 wram_player_dead: db
 
 ; --
@@ -1060,6 +1109,16 @@ wram_player_dead: db
 ;.x:       db
 ;.y:       db
 ;wram_end_spike_list:
+
+wram_enemy1:
+    .active:      db
+    .x:           db
+    .x_subpixels: db
+    .y:           db
+    .y_subpixels: db
+    .animation:   db
+    .visible:     db
+    .update:      dw
 
 ; --
 ; -- Resources
