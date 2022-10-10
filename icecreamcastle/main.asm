@@ -71,17 +71,17 @@ VRAM_BACKGROUND_TILES EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Player sprite position in OAM
 PLAYER_OAM        EQU 0*sizeof_OAM_ATTRS ; The first sprite in the list
-PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
-PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
-PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
-PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
+;PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
+;PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
+;PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
+;PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
 
 ; Target sprite position in OAM
-TARGET_OAM        EQU 2*sizeof_OAM_ATTRS
-TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
-TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
-TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
-TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
+TARGET_OAM        EQU 1*sizeof_OAM_ATTRS
+;TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
+;TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
+;TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
+;TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -144,8 +144,12 @@ _start__init_system:
     ; Turn off sound (for now)
     ld   [rNR52], a
 
+    ; Initialize OAM DMA
+    call load_dma
+
     ; OAM is all messy at initialization, clean it up
     call clear_oam
+    call clear_dma_oam
 
 _start__load_background_tiles:
     ; Load background tiles
@@ -178,20 +182,20 @@ _start__init_player_object:
     xor  a
 
     ; Set the sprite tile number
-    ld   [PLAYER_OAM_TILEID], a
+    ld   [WRAM_PLAYER_OAM_TILEID], a
 
     ; Set attributes
-    ld   [PLAYER_OAM_FLAGS], a
+    ld   [WRAM_PLAYER_OAM_FLAGS], a
 
 _start__init_target_object:
     ld   a, 2 ; The target image location in VRAM
-    ld   [TARGET_OAM_TILEID], a
+    ld   [WRAM_TARGET_OAM_TILEID], a
     ld   a, 8*16
-    ld   [TARGET_OAM_X], a
+    ld   [WRAM_TARGET_OAM_X], a
     ld   a, 8*7
-    ld   [TARGET_OAM_Y], a
+    ld   [WRAM_TARGET_OAM_Y], a
     xor  a
-    ld   [TARGET_OAM_FLAGS], a
+    ld   [WRAM_TARGET_OAM_FLAGS], a
 
 _start__init_palette:
     ; Init palettes
@@ -242,13 +246,13 @@ game_loop:
 _game_loop__update_player_object:
     ; Player position
     ld   a, [wram_player_x]
-    ld   [PLAYER_OAM_X], a
+    ld   [WRAM_PLAYER_OAM_X], a
     ld   a, [wram_player_y]
-    ld   [PLAYER_OAM_Y], a
+    ld   [WRAM_PLAYER_OAM_Y], a
 
     ; Direction facing
     ld   a, [wram_player_facing]
-    ld   [PLAYER_OAM_FLAGS], a
+    ld   [WRAM_PLAYER_OAM_FLAGS], a
 
 _game_loop__animate:
     ; TODO: Only animate the player when on solid
@@ -262,14 +266,14 @@ _game_loop__animate:
 
     ; Reset the animation counter
     ld   [hl], ANIM_SPEED
-    ld   a, [PLAYER_OAM_TILEID]
+    ld   a, [WRAM_PLAYER_OAM_TILEID]
 
     ; Toggle the animation frame for the player
     xor  a, $01
-    ld   [PLAYER_OAM_TILEID], a
+    ld   [WRAM_PLAYER_OAM_TILEID], a
     ; ...and the target
     add  2 ; The target sprites start at location 2
-    ld   [TARGET_OAM_TILEID], a
+    ld   [WRAM_TARGET_OAM_TILEID], a
 .end
 
     ; Get player input
@@ -295,6 +299,7 @@ _game_loop__player_died:
     call reset_level
 
 _game_loop__end:
+    call hram_oam_dma
     jr   game_loop
 
 ; --
@@ -971,6 +976,24 @@ clear_oam:
     ret
 
 ; --
+; -- Clear DMA OAM
+; --
+; -- Set all values in DMA OAM to 0
+; --
+; -- @side a, b, hl Modified
+; --
+clear_dma_oam:
+    ld   hl, wram_oam_dma_start
+    ; OAM is 40 sprites, 4 bytes each
+    ld   b, OAM_COUNT * sizeof_OAM_ATTRS
+    xor  a
+.loop
+    ldi  [hl], a
+    dec  b
+    jr   nz, .loop
+    ret
+
+; --
 ; -- Read Keys
 ; --
 ; -- Get the current state of button presses
@@ -1142,6 +1165,20 @@ INCBIN "resources/tiles-sprites.2bpp"
 INCBIN "resources/tilemap-level-01.map"
 .end_tilemap_level_01
 
+WRAM_OAM_DMA EQU $C100
+
+; Player sprite position in OAM DMA memory
+WRAM_PLAYER_OAM_TILEID EQU WRAM_OAM_DMA+PLAYER_OAM+OAMA_TILEID
+WRAM_PLAYER_OAM_X      EQU WRAM_OAM_DMA+PLAYER_OAM+OAMA_X
+WRAM_PLAYER_OAM_Y      EQU WRAM_OAM_DMA+PLAYER_OAM+OAMA_Y
+WRAM_PLAYER_OAM_FLAGS  EQU WRAM_OAM_DMA+PLAYER_OAM+OAMA_FLAGS
+
+; Target sprite position in OAM DMA memory
+WRAM_TARGET_OAM_TILEID EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_TILEID
+WRAM_TARGET_OAM_X      EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_X
+WRAM_TARGET_OAM_Y      EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_Y
+WRAM_TARGET_OAM_FLAGS  EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_FLAGS
+
 ; --
 ; -- DMA SPRITES
 ; --
@@ -1149,20 +1186,6 @@ INCBIN "resources/tilemap-level-01.map"
 SECTION "OAM DMA", WRAM0[$C100]
 
 wram_oam_dma_start: DS 4*40
-; COPIED FROM ABOVE
-;; Player sprite position in OAM
-;PLAYER_OAM        EQU 0*sizeof_OAM_ATTRS ; The first sprite in the list
-;PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
-;PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
-;PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
-;PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
-;
-;; Target sprite position in OAM
-;TARGET_OAM        EQU 2*sizeof_OAM_ATTRS
-;TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
-;TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
-;TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
-;TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
 wram_oam_dma_end:
 
 ; --
