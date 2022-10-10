@@ -9,7 +9,7 @@ $(ROM): $(OBJECTS)
 	rgbfix --validate --pad-value 0 $(ROM)
 
 main.o: $(SOURCES)
-	rgbasm --output $(OBJECTS) $(SOURCES)
+	rgbasm --halt-without-nop --preserve-ld --output $(OBJECTS) $(SOURCES)
 
 run: $(ROM)
 	sameboy $(<)
