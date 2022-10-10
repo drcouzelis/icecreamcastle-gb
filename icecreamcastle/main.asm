@@ -4,7 +4,7 @@
 ; -- 
 
 INCLUDE "hardware.inc" ; Common Game Boy definitions
-INCLUDE "macros.inc"   ; For convenience
+;INCLUDE "macros.inc"   ; For convenience
 
 ; --
 ; -- General Macros
@@ -223,9 +223,9 @@ game_loop:
     ; Wait for the VBlank interrupt
     halt
 
-    ; NOTE: "nop" is automatically inserted after halt by
-    ; the rgbasm compiler to avoid a bug
-    ;nop
+    ; NOTE: "nop" MUST be the next command after "halt"
+    ; to avoid a bug in the Game Boy hardware
+    nop
 
     ; Wait for the VBlank flag to be set...
     cp   a, [hl]
@@ -1142,3 +1142,68 @@ INCBIN "resources/tiles-sprites.2bpp"
 INCBIN "resources/tilemap-level-01.map"
 .end_tilemap_level_01
 
+; --
+; -- DMA SPRITES
+; --
+; -- We use a chunk of WRAM as a way to access OAM
+SECTION "OAM DMA", WRAM0[$C100]
+
+wram_oam_dma_start: DS 4*40
+; COPIED FROM ABOVE
+;; Player sprite position in OAM
+;PLAYER_OAM        EQU 0*sizeof_OAM_ATTRS ; The first sprite in the list
+;PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
+;PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
+;PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
+;PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
+;
+;; Target sprite position in OAM
+;TARGET_OAM        EQU 2*sizeof_OAM_ATTRS
+;TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
+;TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
+;TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
+;TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
+wram_oam_dma_end:
+
+; --
+; -- DMA ROUTINES
+; --
+SECTION "DMA Routines", ROM0
+
+load_dma:
+    ; DMA only needs to be setup once
+    ; The run_dma routine must be run from HRAM
+    ; so copy the routine from here to there
+    ;push bc ; ...probably not needed
+    ;push hl
+    ld   hl, run_dma
+    ld   b, end_run_dma - run_dma ; Number of bytes to copy
+    ld   c, LOW(hram_oam_dma)     ; Low byte of the destination address
+.copy
+    ld   a, [hli]
+    ldh  [c], a
+    inc  c
+    dec  b
+    jr   nz, .copy
+    ;pop  hl
+    ;pop  bc
+    ret
+
+run_dma:
+    ; Start the DMA transfer
+    ld   a, HIGH(wram_oam_dma_start)
+    ldh  [rDMA], a
+    ; Delay for a total of 4x40 = 160 cycles
+    ld   a, 40
+.wait
+    dec  a         ; 1 cycle
+    jr   nz, .wait ; 3 cycles
+    ret
+end_run_dma:
+
+; --
+; -- HRAM OAM DMA
+; --
+SECTION "HRAM OAM DMA", HRAM
+
+hram_oam_dma: ds end_run_dma - run_dma ; Reserve space to copy the routine to
