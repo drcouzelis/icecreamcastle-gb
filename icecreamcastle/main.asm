@@ -3,24 +3,13 @@
 ; -- David Couzelis 2021-02-20
 ; -- 
 
-INCLUDE "hardware.inc" ; Common Game Boy definitions
+; Common Game Boy definitions
+; https://github.com/gbdev/hardware.inc
+INCLUDE "hardware.inc"
 
-; --
-; -- General Macros
-; --
-
-; --
-; -- MACRO: Divide By 8
-; --
-; -- Divide the given register by 8
-; --
-; -- @param \1 Register
-; --
-MACRO divide_by_8
-    srl \1
-    srl \1
-    srl \1
-ENDM
+INCLUDE "dma.asm"
+INCLUDE "player.asm"
+INCLUDE "utilities.asm" 
 
 ; --
 ; -- Game Constants
