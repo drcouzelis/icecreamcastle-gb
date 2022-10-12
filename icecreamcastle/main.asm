@@ -4,7 +4,6 @@
 ; -- 
 
 INCLUDE "hardware.inc" ; Common Game Boy definitions
-;INCLUDE "macros.inc"   ; For convenience
 
 ; --
 ; -- General Macros
