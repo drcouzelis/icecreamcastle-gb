@@ -7,7 +7,7 @@
 ; https://github.com/gbdev/hardware.inc
 INCLUDE "hardware.inc"
 
-INCLUDE "dma.asm"
+INCLUDE "oamdma.asm"
 INCLUDE "player.asm"
 INCLUDE "utilities.asm" 
 
@@ -59,17 +59,9 @@ VRAM_BACKGROUND_TILES EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Player sprite position in OAM
 PLAYER_OAM        EQU 0*sizeof_OAM_ATTRS ; The first sprite in the list
-;PLAYER_OAM_TILEID EQU _OAMRAM+PLAYER_OAM+OAMA_TILEID
-;PLAYER_OAM_X      EQU _OAMRAM+PLAYER_OAM+OAMA_X
-;PLAYER_OAM_Y      EQU _OAMRAM+PLAYER_OAM+OAMA_Y
-;PLAYER_OAM_FLAGS  EQU _OAMRAM+PLAYER_OAM+OAMA_FLAGS
 
 ; Target sprite position in OAM
 TARGET_OAM        EQU 1*sizeof_OAM_ATTRS
-;TARGET_OAM_TILEID EQU _OAMRAM+TARGET_OAM+OAMA_TILEID
-;TARGET_OAM_X      EQU _OAMRAM+TARGET_OAM+OAMA_X
-;TARGET_OAM_Y      EQU _OAMRAM+TARGET_OAM+OAMA_Y
-;TARGET_OAM_FLAGS  EQU _OAMRAM+TARGET_OAM+OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -1140,17 +1132,17 @@ resources:
 
 ; Background tiles
 .background_tiles
-INCBIN "resources/tiles-background.2bpp"
+INCBIN "tiles-background.2bpp"
 .end_background_tiles
 
 ; Sprite tiles
 .sprite_tiles
-INCBIN "resources/tiles-sprites.2bpp"
+INCBIN "tiles-sprites.2bpp"
 .end_sprite_tiles
 
 ; Map, level 01
 .tilemap_level_01
-INCBIN "resources/tilemap-level-01.map"
+INCBIN "tilemap-level-01.map"
 .end_tilemap_level_01
 
 WRAM_OAM_DMA EQU $C100
@@ -1166,55 +1158,3 @@ WRAM_TARGET_OAM_TILEID EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_TILEID
 WRAM_TARGET_OAM_X      EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_X
 WRAM_TARGET_OAM_Y      EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_Y
 WRAM_TARGET_OAM_FLAGS  EQU WRAM_OAM_DMA+TARGET_OAM+OAMA_FLAGS
-
-; --
-; -- DMA SPRITES
-; --
-; -- We use a chunk of WRAM as a way to access OAM
-SECTION "OAM DMA", WRAM0[$C100]
-
-wram_oam_dma_start: DS 4*40
-wram_oam_dma_end:
-
-; --
-; -- DMA ROUTINES
-; --
-SECTION "DMA Routines", ROM0
-
-load_dma:
-    ; DMA only needs to be setup once
-    ; The run_dma routine must be run from HRAM
-    ; so copy the routine from here to there
-    ;push bc ; ...probably not needed
-    ;push hl
-    ld   hl, run_dma
-    ld   b, end_run_dma - run_dma ; Number of bytes to copy
-    ld   c, LOW(hram_oam_dma)     ; Low byte of the destination address
-.copy
-    ld   a, [hli]
-    ldh  [c], a
-    inc  c
-    dec  b
-    jr   nz, .copy
-    ;pop  hl
-    ;pop  bc
-    ret
-
-run_dma:
-    ; Start the DMA transfer
-    ld   a, HIGH(wram_oam_dma_start)
-    ldh  [rDMA], a
-    ; Delay for a total of 4x40 = 160 cycles
-    ld   a, 40
-.wait
-    dec  a         ; 1 cycle
-    jr   nz, .wait ; 3 cycles
-    ret
-end_run_dma:
-
-; --
-; -- HRAM OAM DMA
-; --
-SECTION "HRAM OAM DMA", HRAM
-
-hram_oam_dma: ds end_run_dma - run_dma ; Reserve space to copy the routine to
