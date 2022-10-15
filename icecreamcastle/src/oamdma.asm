@@ -32,6 +32,9 @@ load_dma:
     ; so copy the routine from here to there
     ;push bc ; ...probably not needed
     ;push hl
+
+    call clear_dma_oam 
+
     ld   hl, run_dma
     ld   b, end_run_dma - run_dma ; Number of bytes to copy
     ld   c, LOW(hram_oam_dma)     ; Low byte of the destination address
@@ -56,6 +59,24 @@ run_dma:
     jr   nz, .wait ; 3 cycles
     ret
 end_run_dma:
+
+; --
+; -- Clear DMA OAM
+; --
+; -- Set all values in DMA OAM to 0
+; --
+; -- @side a, b, hl Modified
+; --
+clear_dma_oam:
+    ld   hl, wram_oam_dma_start
+    ; OAM is 40 sprites, 4 bytes each
+    ld   b, OAM_COUNT * sizeof_OAM_ATTRS
+    xor  a
+.loop
+    ldi  [hl], a
+    dec  b
+    jr   nz, .loop
+    ret
 
 ; --
 ; -- HRAM OAM DMA

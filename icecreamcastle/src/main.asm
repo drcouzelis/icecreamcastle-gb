@@ -124,12 +124,11 @@ _start__init_system:
     ; Turn off sound (for now)
     ld   [rNR52], a
 
-    ; Initialize OAM DMA
-    call load_dma
-
     ; OAM is all messy at initialization, clean it up
     call clear_oam
-    call clear_dma_oam
+
+    ; Initialize OAM DMA
+    call load_dma
 
 _start__load_background_tiles:
     ; Load background tiles
@@ -946,24 +945,6 @@ copy_mem:
 ; --
 clear_oam:
     ld   hl, _OAMRAM
-    ; OAM is 40 sprites, 4 bytes each
-    ld   b, OAM_COUNT * sizeof_OAM_ATTRS
-    xor  a
-.loop
-    ldi  [hl], a
-    dec  b
-    jr   nz, .loop
-    ret
-
-; --
-; -- Clear DMA OAM
-; --
-; -- Set all values in DMA OAM to 0
-; --
-; -- @side a, b, hl Modified
-; --
-clear_dma_oam:
-    ld   hl, wram_oam_dma_start
     ; OAM is 40 sprites, 4 bytes each
     ld   b, OAM_COUNT * sizeof_OAM_ATTRS
     xor  a
