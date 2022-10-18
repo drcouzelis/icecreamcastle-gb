@@ -43,10 +43,10 @@ GRAVITY_MAX_SPEED EQU 2 ; 2 pixels per frame
 GRAVITY_OFFSET_SUBPIXELS EQU %11011001 ; 1.0 - GRAVITY_SPEED_SUBPIXELS
 
 ; Directions
-DIRECTION_UP    EQU %00000001
-DIRECTION_DOWN  EQU %00000010
-DIRECTION_LEFT  EQU %00000100
-DIRECTION_RIGHT EQU %00001000
+DIR_UP    EQU %00000001
+DIR_DOWN  EQU %00000010
+DIR_LEFT  EQU %00000100
+DIR_RIGHT EQU %00001000
 
 ; Background tiles
 ; The values map to the tile index number in VRAM
@@ -82,11 +82,11 @@ TARGET_OAM_FLAGS  EQU DMA_OAM + TARGET_OAM + OAMA_FLAGS
 ; -- Used to time the main game loop
 ; -- Sets a flag notifying that it's time to update the game logic
 ; --
-; -- @side wram_vblank_flag = 1
+; -- @side wVBlankFlag = 1
 ; --
 SECTION "VBlank Interrupt", ROM0[$0040]
     push hl
-    ld   hl, wram_vblank_flag
+    ld   hl, wVBlankFlag
     ld   [hl], 1
     pop  hl
     reti
@@ -120,14 +120,14 @@ start:
     ; Wait for VBlank before starting setup
     call wait_for_vblank
 
-_start__init_system:
+; Initialize the system
     xor  a
 
     ; Turn off the screen
     ld   [rLCDC], a
 
-    ; Set the VBLank flag to 0
-    ld   [wram_vblank_flag], a
+    ; Reset the VBLank flag
+    ld   [wVBlankFlag], a
 
     ; Set the X and Y positions of the background to 0
     ld   [rSCX], a
@@ -142,34 +142,31 @@ _start__init_system:
     ; Initialize DMA
     call InitDMA
 
-_start__load_background_tiles:
     ; Load background tiles
     ld   hl, VRAM_BACKGROUND_TILES
     ld   de, resources.background_tiles
     ld   bc, resources.end_background_tiles - resources.background_tiles
     call copy_mem
 
-_start__load_tilemap:
-    ; Load background
+    ; Load the background tilemap
     ; Starting at the top left corner of the background tilemap
     ld   hl, _SCRN0 ; $9800
     ld   de, resources.tilemap_level_01
     ld   bc, resources.end_tilemap_level_01 - resources.tilemap_level_01
     call copy_mem
 
-_start__load_sprite_tiles:
     ; Load sprite tiles
     ld   hl, VRAM_OAM_TILES
     ld   de, resources.sprite_tiles
     ld   bc, resources.end_sprite_tiles - resources.sprite_tiles
     call copy_mem
 
-_start__init_player:
+    ; Initialize the player
     ; Reset all level parameters before starting the level
     ; TODO: Reset to the CURRENT level (after making more levels)
     call reset_level
 
-_start__init_player_object:
+    ; Initialize the player object
     xor  a
 
     ; Set the sprite tile number
@@ -178,7 +175,7 @@ _start__init_player_object:
     ; Set attributes
     ld   [PLAYER_OAM_FLAGS], a
 
-_start__init_target_object:
+    ; Initialize the target (ice cream)
     ld   a, 2 ; The target image location in VRAM
     ld   [TARGET_OAM_TILEID], a
     ld   a, 8*16
@@ -188,7 +185,6 @@ _start__init_target_object:
     xor  a
     ld   [TARGET_OAM_FLAGS], a
 
-_start__init_palette:
     ; Init palettes
     ld   a, %00011011
 
@@ -198,7 +194,7 @@ _start__init_palette:
     ; Object palette 0
     ld   [rOBP0], a
 
-_start__init_screen:
+    ; Initialize the screen
     ; Turn the screen on, enable the OAM and BG layers
     ld   a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
     ld   [rLCDC], a
@@ -212,7 +208,7 @@ _start__init_screen:
     ; ...setup complete!
 
 game_loop:
-    ld   hl, wram_vblank_flag
+    ld   hl, wVBlankFlag
     xor  a
 .wait
     ; Wait for the VBlank interrupt
@@ -227,14 +223,14 @@ game_loop:
     jr   z, .wait
 
     ; ...done waiting! Now clear the VBlank flag and continue
-    ld   [wram_vblank_flag], a
+    ld   [wVBlankFlag], a
 
     ; Time to update the game!
 
     ; Complete all OAM changes first, befor VBlank ends!
     ; TODO: Implement DMA to avoid issues with VBlank
 
-_game_loop__update_player_object:
+    ; Update the player object
     ; Player position
     ld   a, [wram_player_x]
     ld   [PLAYER_OAM_X], a
@@ -245,13 +241,14 @@ _game_loop__update_player_object:
     ld   a, [wram_player_facing]
     ld   [PLAYER_OAM_FLAGS], a
 
-_game_loop__animate:
+    ; Update the game animations
     ; TODO: Only animate the player when on solid
 
+Animate:
     ; Is it time to animate?
     ld   hl, wram_animation_counter
     dec  [hl]
-    jr   nz, .end
+    jr   nz, .no_animation
 
     ; Animate!
 
@@ -265,7 +262,7 @@ _game_loop__animate:
     ; ...and the target
     add  2 ; The target sprites start at location 2
     ld   [TARGET_OAM_TILEID], a
-.end
+.no_animation
 
     ; Get player input
     call read_keys
@@ -282,14 +279,13 @@ _game_loop__animate:
     ; Did the player die?
     ld   a, [wram_player_dead]
     cp   1
-    jr   nz, _game_loop__end
+    jr   nz, .end
 
-_game_loop__player_died:
-    ; If the player is dead, reset the current level
-    ; so they can try again
+    ; The player DIED
+    ; Reset the current level so they can try again
     call reset_level
 
-_game_loop__end:
+.end
     call hDMA
     jr   game_loop
 
@@ -337,16 +333,16 @@ reset_level:
 ; --
 MACRO test_player_collision_going
     ld   a, [wram_player_x]
-IF \1 == DIRECTION_LEFT
+IF \1 == DIR_LEFT
     dec  a
-ELIF \1 == DIRECTION_RIGHT
+ELIF \1 == DIR_RIGHT
     inc  a
 ENDC
     ld   b, a
     ld   a, [wram_player_y]
-IF \1 == DIRECTION_UP
+IF \1 == DIR_UP
     dec  a
-ELIF \1 == DIRECTION_DOWN
+ELIF \1 == DIR_DOWN
     inc  a
 ENDC
     ld   c, a
@@ -385,7 +381,7 @@ _update_player__button_right:
     jr   nc, .end
 
     ; Check for map collision
-    test_player_collision_going DIRECTION_RIGHT
+    test_player_collision_going DIR_RIGHT
     jr   z, .end
 
     ; Move the player right
@@ -413,7 +409,7 @@ _update_player__button_left:
     jr   nc, .end
 
     ; Check for map collision
-    test_player_collision_going DIRECTION_LEFT
+    test_player_collision_going DIR_LEFT
     jr   z, .end
 
     ; Move the player left
@@ -438,7 +434,7 @@ _update_player__button_a:
 
     ; Jump button was pressed!
     ; If not standing on anything solid then ignore the jump button
-    test_player_collision_going DIRECTION_DOWN
+    test_player_collision_going DIR_DOWN
     jr   nz, .end
 
     ; The player is standing on solid ground and is trying to jump
@@ -502,7 +498,7 @@ _update_player__add_gravity_up:
 _update_player__add_gravity_down:
     ; Only add gravity if the player isn't on solid ground
     ; If not standing on anything solid then add gravity
-    test_player_collision_going DIRECTION_DOWN
+    test_player_collision_going DIR_DOWN
     jr   nz, _update_player__add_gravity_nothing_below
 
 _update_player__add_gravity_on_solid:
@@ -579,7 +575,7 @@ _update_player__vertical_movement_up:
     cp b ; b == 0?
     jr z, _update_player__end_vertical_movement
     push bc
-    test_player_collision_going DIRECTION_UP
+    test_player_collision_going DIR_UP
     pop bc
     jr z, _update_player__vertical_collision_up ; Collision! Skip movement
     ; Move one pixel up
@@ -625,7 +621,7 @@ _update_player__vertical_movement_down:
     cp b ; b == 0?
     jr z, _update_player__end_vertical_movement
     push bc
-    test_player_collision_going DIRECTION_DOWN
+    test_player_collision_going DIR_DOWN
     pop bc
     jr z, _update_player__end_vertical_movement ; Collision! Skip movement
     ; Move one pixel down
@@ -780,7 +776,7 @@ test_player_collision_at_point:
 
     ; Is the player moving downwards?
     ld   a, [wram_player_direction]
-    and  DIRECTION_DOWN
+    and  DIR_DOWN
     jr   nz, .end ; ...no! Test for spike collision...
 
     ; The player is not moving downwards, so check for collision
@@ -1028,7 +1024,7 @@ SECTION "Game State Variables", WRAM0
 
 ; The VBlank flag is used to update the game at 60 frames per second
 ; If this is unset then update the game
-wram_vblank_flag: db
+wVBlankFlag: db
 
 ; If unset then it is time to animate the sprites
 wram_animation_counter: db
@@ -1098,23 +1094,19 @@ wram_player_dead: db
 ; -- Enemies
 ; --
 
-; Spikes
-;wram_spike_list:
-;wram_spike_1:
-;.enabled: db
-;.x:       db
-;.y:       db
-;wram_end_spike_list:
-
-wram_enemy1:
-    .active:      db
-    .x:           db
+; Enemy Saw 1
+; Middle section of the level
+; 
+wEnemySaw1:
+    ;.active:      db
+    .dir:         db ; Direction the saw is moving in, set is right, reset is left
+    .x:           db ; X pos
     .x_subpixels: db
-    .y:           db
+    .y:           db ; Y pos
     .y_subpixels: db
-    .animation:   db
-    .visible:     db
-    .update:      dw
+    ;.animation:   db
+    ;.visible:     db
+    ;.update:      dw
 
 ; --
 ; -- Resources
