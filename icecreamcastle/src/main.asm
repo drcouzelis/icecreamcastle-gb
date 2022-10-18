@@ -75,6 +75,15 @@ TARGET_OAM_X      EQU DMA_OAM + TARGET_OAM + OAMA_X
 TARGET_OAM_Y      EQU DMA_OAM + TARGET_OAM + OAMA_Y
 TARGET_OAM_FLAGS  EQU DMA_OAM + TARGET_OAM + OAMA_FLAGS
 
+; Enemy Saw 1 sprite position in OAM
+ENEMYSAW1_OAM        EQU 2 * sizeof_OAM_ATTRS
+
+; Enemy Saw 1 sprite position in OAM DMA memory
+ENEMYSAW1_OAM_TILEID EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_TILEID
+ENEMYSAW1_OAM_X      EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_X
+ENEMYSAW1_OAM_Y      EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_Y
+ENEMYSAW1_OAM_FLAGS  EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_FLAGS
+
 ; --
 ; -- VBlank Interrupt
 ; --
@@ -161,10 +170,10 @@ start:
     ld   bc, resources.end_sprite_tiles - resources.sprite_tiles
     call copy_mem
 
-    ; Initialize the player
+; Initialize the player
     ; Reset all level parameters before starting the level
     ; TODO: Reset to the CURRENT level (after making more levels)
-    call reset_level
+    call ResetLevel
 
     ; Initialize the player object
     xor  a
@@ -175,16 +184,25 @@ start:
     ; Set attributes
     ld   [PLAYER_OAM_FLAGS], a
 
-    ; Initialize the target (ice cream)
+; Initialize the target (ice cream)
     ld   a, 2 ; The target image location in VRAM
     ld   [TARGET_OAM_TILEID], a
-    ld   a, 8*16
+    ld   a, 8 * 16
     ld   [TARGET_OAM_X], a
-    ld   a, 8*7
+    ld   a, 8 * 7
     ld   [TARGET_OAM_Y], a
-    xor  a
-    ld   [TARGET_OAM_FLAGS], a
+    ;xor  a
+    ;ld   [TARGET_OAM_FLAGS], a
 
+; Initialize the Enemy Saw 1
+    ld   a, 5
+    ld   [ENEMYSAW1_OAM_TILEID], a
+    ld   a, 8 * 15
+    ld   [ENEMYSAW1_OAM_X], a
+    ld   a, 8 * 9
+    ld   [ENEMYSAW1_OAM_Y], a
+
+; Initialize more of the system
     ; Init palettes
     ld   a, %00011011
 
@@ -262,13 +280,16 @@ Animate:
     ; ...and the target
     add  2 ; The target sprites start at location 2
     ld   [TARGET_OAM_TILEID], a
+    ; ...and the saw
+    add  3 ; The enemy saw sprites start at location 5
+    ld   [ENEMYSAW1_OAM_TILEID], a
 .no_animation
 
     ; Get player input
     call read_keys
 
     ; Update the player location and map collision
-    call update_player
+    call UpdatePlayer
 
     ; Check for collision with spikes / death
     call check_collisions_with_spikes
@@ -283,7 +304,7 @@ Animate:
 
     ; The player DIED
     ; Reset the current level so they can try again
-    call reset_level
+    call ResetLevel
 
 .end
     call hDMA
@@ -294,9 +315,7 @@ Animate:
 ; --
 ; -- Reset the current level
 ; --
-; -- @side a Modified
-; --
-reset_level:
+ResetLevel:
     ; Load default player X Position
     ld   a, PLAYER_START_X
     ld   [wram_player_x], a
@@ -357,16 +376,13 @@ ENDM
 ; -- Move the player based on key input and gravity
 ; --
 ; -- @return z Set if collision
-; -- @side a Modified
 ; --
-update_player:
+UpdatePlayer:
 
-_update_player__button_right:
-
-    ; RIGHT
+; RIGHT
     ld   a, [wram_keys]
     and  PADF_RIGHT
-    jr   nz, .end
+    jr   nz, .end_right
 
     ; Right key pressed
 
@@ -378,23 +394,21 @@ _update_player__button_right:
     ld   a, [wram_player_x_subpixels]
     add  PLAYER_WALK_SPEED_SUBPIXELS
     ld   [wram_player_x_subpixels], a
-    jr   nc, .end
+    jr   nc, .end_right
 
     ; Check for map collision
     test_player_collision_going DIR_RIGHT
-    jr   z, .end
+    jr   z, .end_right
 
     ; Move the player right
     ld   hl, wram_player_x
     inc  [hl]
-.end
+.end_right
     
-_update_player__button_left:
-
-    ; LEFT
+; LEFT
     ld   a, [wram_keys]
     and  PADF_LEFT
-    jr   nz, .end
+    jr   nz, .end_left
 
     ; Left key pressed
 
@@ -406,20 +420,18 @@ _update_player__button_left:
     ld   a, [wram_player_x_subpixels]
     sub  PLAYER_WALK_SPEED_SUBPIXELS
     ld   [wram_player_x_subpixels], a
-    jr   nc, .end
+    jr   nc, .end_left
 
     ; Check for map collision
     test_player_collision_going DIR_LEFT
-    jr   z, .end
+    jr   z, .end_left
 
     ; Move the player left
     ld   hl, wram_player_x
     dec  [hl]
-.end
+.end_left
 
-_update_player__button_a:
-
-    ; JUMP / vertical movement
+; JUMP / vertical movement
 
     ; CONTROLLER INPUT
     ; Is the A button pressed?
@@ -430,12 +442,12 @@ _update_player__button_a:
     ; JUMP / A
     ld   a, [wram_keys]
     and  PADF_A
-    jr   nz, .end
+    jr   nz, .end_button_a
 
     ; Jump button was pressed!
     ; If not standing on anything solid then ignore the jump button
     test_player_collision_going DIR_DOWN
-    jr   nz, .end
+    jr   nz, .end_button_a
 
     ; The player is standing on solid ground and is trying to jump
     ; Set jumping parameters
@@ -449,11 +461,10 @@ _update_player__button_a:
     ; Clear any leftover subpixel movement, for consistent jumping
     xor  a
     ld   [wram_player_y_subpixels], a
-.end
+.end_button_a
     
-_update_player__add_gravity:
+; APPLY GRAVITY
 
-    ; APPLY GRAVITY
     ; Is the player jumping / IS_JUMPING is set to 1?
     ; Y -> Apply gravity by SUBTRACTING it from DY
     ;      Did DY down rollover past 0?
@@ -470,9 +481,8 @@ _update_player__add_gravity:
     ; Is the player moving upwards (jumping) or down?
     ld   a, [wram_player_jumping]
     cp   0
-    jr   z, _update_player__add_gravity_down
+    jr   z, .going_down
 
-_update_player__add_gravity_up:
     ; The player is jumping up
     ld   a, [wram_player_dy_subpixels]
     sub  GRAVITY_SPEED_SUBPIXELS
@@ -484,7 +494,7 @@ _update_player__add_gravity_up:
     ld   [wram_player_dy], a
 
     ; Check if the upward velocity has gone below 0
-    jr   nc, _update_player__end_add_gravity
+    jr   nc, EndGravity
 
     ; The player is at the apex of the jump
     ; Start coming back down!
@@ -493,15 +503,14 @@ _update_player__add_gravity_up:
     ld   [wram_player_jumping], a
     ld   [wram_player_dy], a
     ld   [wram_player_dy_subpixels], a
-    jr   _update_player__end_add_gravity
+    jr   EndGravity
 
-_update_player__add_gravity_down:
+.going_down
     ; Only add gravity if the player isn't on solid ground
     ; If not standing on anything solid then add gravity
     test_player_collision_going DIR_DOWN
-    jr   nz, _update_player__add_gravity_nothing_below
+    jr   nz, .no_collision_down
 
-_update_player__add_gravity_on_solid:
     ; On solid, clear velocity and skip to the next section
     xor  a
     ld   [wram_player_y_subpixels], a
@@ -511,9 +520,9 @@ _update_player__add_gravity_on_solid:
     ; This prevents a glitch where you can walk over single tile gaps
     ld   a, GRAVITY_OFFSET_SUBPIXELS
     ld   [wram_player_dy_subpixels], a
-    jr   _update_player__end_add_gravity
+    jr   EndGravity
 
-_update_player__add_gravity_nothing_below:
+.no_collision_down
     ; The player is falling down
     ld   a, [wram_player_dy_subpixels]
     add  GRAVITY_SPEED_SUBPIXELS
@@ -527,9 +536,8 @@ _update_player__add_gravity_nothing_below:
     ; Don't go faster than terminal velocity
     cp   a, GRAVITY_MAX_SPEED
     ; If c is set then that means DY is less than GRAVITY MAX SPEED
-    jr   c, _update_player__end_add_gravity
+    jr   c, EndGravity
 
-_update_player__at_max_gravity:
     ; Cap the speed to GRAVITY_MAX_SPEED
     ; Cap it to the max speed so you don't fall at excessive speeds
     ld   [wram_player_dy], a
@@ -537,11 +545,10 @@ _update_player__at_max_gravity:
     ; Zero out the subpixel speed
     ld   [wram_player_dy_subpixels], a
 
-_update_player__end_add_gravity:
+EndGravity:
 
-_update_player__vertical_movement:
+; MOVE THE PLAYER
 
-    ; MOVE THE PLAYER
     ; Is the player jumping / IS_JUMPING is set to 1?
     ; Y -> Move the player UP according to DY
     ;      Did the player bonk his head?
