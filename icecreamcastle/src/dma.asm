@@ -19,6 +19,8 @@ InitDMA:
     ; The DMA routine must be run from HRAM
     ; so copy the routine from here to there
 
+    call ClearDMA
+
     ld   hl, RunDMA
     ld   b, EndRunDMA - RunDMA ; Number of bytes to copy
     ld   c, LOW(hDMA)  ; Low byte of the destination address
@@ -52,6 +54,22 @@ RunDMA:
     jr   nz, .wait ; 3 cycles
     ret
 EndRunDMA:
+
+; --
+; -- Clear DMA
+; --
+; -- Set all values in DMA in WRAM to 0.
+; --
+ClearDMA:
+    ld   hl, wDMAStart
+    ; OAM is 40 sprites, 4 bytes each
+    ld   b, OAM_COUNT * sizeof_OAM_ATTRS
+    xor  a
+.loop
+    ldi  [hl], a
+    dec  b
+    jr   nz, .loop
+    ret
 
 ; --
 ; -- DMA OAM
