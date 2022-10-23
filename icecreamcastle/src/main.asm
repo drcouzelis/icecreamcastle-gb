@@ -194,14 +194,6 @@ start:
     ;xor  a
     ;ld   [TARGET_OAM_FLAGS], a
 
-; Initialize the Enemy Saw 1
-    ld   a, 5
-    ld   [ENEMYSAW1_OAM_TILEID], a
-    ld   a, 8 * 15
-    ld   [ENEMYSAW1_OAM_X], a
-    ld   a, 8 * 9
-    ld   [ENEMYSAW1_OAM_Y], a
-
 ; Initialize more of the system
     ; Init palettes
     ld   a, %00011011
@@ -244,9 +236,6 @@ game_loop:
     ld   [wVBlankFlag], a
 
     ; Time to update the game!
-
-    ; Complete all OAM changes first, befor VBlank ends!
-    ; TODO: Implement DMA to avoid issues with VBlank
 
     ; Update the player object
     ; Player position
@@ -295,7 +284,7 @@ Animate:
     call check_collisions_with_spikes
 
     ; TODO: Check for collision with enemies / death
-    ;call update_enemies
+    call UpdateEnemySaw1
 
     ; Did the player die?
     ld   a, [wram_player_dead]
@@ -330,6 +319,16 @@ ResetLevel:
     ld   [wram_player_y_subpixels], a
     ld   [wram_player_facing], a      ; 0 is facing right
     ld   [wram_player_jumping], a     ; 0 is "not jumping"
+
+    ; Reset the enemy saw 1 values
+    ld   a, 5
+    ld   [ENEMYSAW1_OAM_TILEID], a
+    ld   a, 8 * 15
+    ld   [ENEMYSAW1_OAM_X], a
+    ld   a, 8 * 9
+    ld   [ENEMYSAW1_OAM_Y], a
+    ld   a, DIR_LEFT
+    ld   [wEnemySaw1.dir], a
 
     ; Init animation
     ld   a, ANIM_SPEED
@@ -909,6 +908,50 @@ player_killed:
     ret
 
 ; --
+; -- Update Enemy
+; --
+; --
+UpdateEnemySaw1:
+
+    ld   a, [wEnemySaw1.dir]
+    cp   a, DIR_RIGHT
+    jr   nz, .left
+.right
+    ld   hl, ENEMYSAW1_OAM_X
+    inc  [hl]
+    jr   .check_bounce
+
+.left
+    ld   hl, ENEMYSAW1_OAM_X
+    dec  [hl]
+
+.check_bounce
+    ; if X == 8 * 15 then go LEFT
+    ; if X == 8 * 8 then go RIGHT
+    ld   a, 8 * 15
+    cp   a, [hl]
+    jr   z, .bounce_left
+
+    ld   a, 8 * 8
+    cp   a, [hl]
+    jr   z, .bounce_right
+
+    jr   .end
+
+.bounce_left
+    ld   a, DIR_LEFT
+    ld   [wEnemySaw1.dir], a
+    jr   .end
+
+.bounce_right
+    ld   a, DIR_RIGHT
+    ld   [wEnemySaw1.dir], a
+    jr   .end
+
+.end
+    ret
+
+; --
 ; -- Wait For VBlank
 ; --
 ; -- Wait for VBlank
@@ -1106,7 +1149,7 @@ wram_player_dead: db
 ; 
 wEnemySaw1:
     ;.active:      db
-    .dir:         db ; Direction the saw is moving in, set is right, reset is left
+    .dir:         db ; Direction the saw is moving in
     .x:           db ; X pos
     .x_subpixels: db
     .y:           db ; Y pos
