@@ -18,13 +18,17 @@ INCLUDE "utilities.asm"
 ; Player starting position on screen
 PLAYER_START_X EQU 48
 PLAYER_START_Y EQU 136
-ANIM_SPEED     EQU 10 ; Frames until animation time, 10 is 6 FPS
+ANIM_SPEED     EQU 12 ; Frames until animation time, 12 is 5 FPS
 
 PLAYER_WIDTH   EQU 7
 PLAYER_HEIGHT  EQU 7
 
 ; Number of pixels moved every frame when walking
 PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
+
+; Enemy Saw movement speed
+ENEMY_SAW_SPEED_SUBPIXELS EQU %1000000 ; 0.5 in binary fraction
+ENEMY_SAW_ANIM_SPEED EQU 4 ; 4 is 15 FPS
 
 ; Jump up with a velocity of 2.75 pixels per frame
 PLAYER_JUMP_SPEED           EQU 2
@@ -269,10 +273,23 @@ Animate:
     ; ...and the target
     add  2 ; The target sprites start at location 2
     ld   [TARGET_OAM_TILEID], a
-    ; ...and the saw
-    add  3 ; The enemy saw sprites start at location 5
-    ld   [ENEMYSAW1_OAM_TILEID], a
 .no_animation
+
+AnimateEnemySaw:
+    ld   hl, wEnemySawAnimation
+    dec  [hl]
+    jr   nz, .no_saw_animation
+
+    ; %00000101
+    ; %00000110
+    ; %00000011
+    ld   a, [ENEMYSAW1_OAM_TILEID]
+    xor  a, $03 ; Toggle between sprites 5 and 6
+    ld   [ENEMYSAW1_OAM_TILEID], a
+    ; Reset the counter
+    ld   a, ENEMY_SAW_ANIM_SPEED
+    ld   [wEnemySawAnimation], a
+.no_saw_animation
 
     ; Get player input
     call read_keys
@@ -333,6 +350,9 @@ ResetLevel:
     ; Init animation
     ld   a, ANIM_SPEED
     ld   [wram_animation_counter], a
+
+    ld   a, ENEMY_SAW_ANIM_SPEED
+    ld   [wEnemySawAnimation], a
 
     ; Revive the player
     xor  a
@@ -1143,6 +1163,8 @@ wram_player_dead: db
 ; --
 ; -- Enemies
 ; --
+
+wEnemySawAnimation: db
 
 ; Enemy Saw 1
 ; Middle section of the level
