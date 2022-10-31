@@ -19,7 +19,8 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
   - [x] Add sprite to screen
   - [x] Animation
   - [x] Movement
-  - [ ] Collision detection with player
+  - [x] Collision detection with player
+  - [ ] Fix speed
   - [ ] ...add the second saw
 - [ ] Add laser enemies
 - [ ] Tries counter

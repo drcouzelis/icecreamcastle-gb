@@ -252,8 +252,13 @@ game_loop:
     ld   a, [wram_player_facing]
     ld   [PLAYER_OAM_FLAGS], a
 
+    ; Update the enemy saw object
+    ld   a, [wEnemySaw1.x]
+    ld   [ENEMYSAW1_OAM_X], a
+    ld   a, [wEnemySaw1.y]
+    ld   [ENEMYSAW1_OAM_Y], a
+
     ; Update the game animations
-    ; TODO: Only animate the player when on solid
 
 Animate:
     ; Is it time to animate?
@@ -303,6 +308,8 @@ AnimateEnemySaw:
     ; TODO: Check for collision with enemies / death
     call UpdateEnemySaw1
 
+    call CheckCollisionWithEnemySaw1
+
     ; Did the player die?
     ld   a, [wram_player_dead]
     cp   1
@@ -341,9 +348,9 @@ ResetLevel:
     ld   a, 5
     ld   [ENEMYSAW1_OAM_TILEID], a
     ld   a, 8 * 15
-    ld   [ENEMYSAW1_OAM_X], a
+    ld   [wEnemySaw1.x], a
     ld   a, 8 * 9
-    ld   [ENEMYSAW1_OAM_Y], a
+    ld   [wEnemySaw1.y], a
     ld   a, DIR_LEFT
     ld   [wEnemySaw1.dir], a
 
@@ -747,11 +754,11 @@ test_player_collision_at_point:
     ; Check tile collision
 
     ld   a, b
-    ; The X position if offset by 8
+    ; The X position is offset by 8
     sub  OAM_X_OFS
     ld   b, a
     ld   a, c
-    ; The Y position if offset by 16
+    ; The Y position is offset by 16
     sub  OAM_Y_OFS
     ld   c, a
 
@@ -875,11 +882,11 @@ check_collision_with_spikes_at_point:
     push de
 
     ; Check collision with spikes
-    ; The X position if offset by 8
+    ; The X position is offset by 8
     ld   a, b
     sub  OAM_X_OFS
     ld   b, a
-    ; The Y position if offset by 16
+    ; The Y position is offset by 16
     ld   a, c
     sub  OAM_Y_OFS
     ld   c, a
@@ -933,16 +940,19 @@ player_killed:
 ; --
 UpdateEnemySaw1:
 
+    ; TODO: The saw should be moving at the speed of ENEMY_SAW_SPEED_SUBPIXELS
+    ;       using wEnemySaw1.x_subpixels
+
     ld   a, [wEnemySaw1.dir]
     cp   a, DIR_RIGHT
     jr   nz, .left
 .right
-    ld   hl, ENEMYSAW1_OAM_X
+    ld   hl, wEnemySaw1.x
     inc  [hl]
     jr   .check_bounce
 
 .left
-    ld   hl, ENEMYSAW1_OAM_X
+    ld   hl, wEnemySaw1.x
     dec  [hl]
 
 .check_bounce
@@ -969,6 +979,89 @@ UpdateEnemySaw1:
     jr   .end
 
 .end
+    ret
+
+; --
+; -- Check Collision With Enemy Saw 1
+; --
+CheckCollisionWithEnemySaw1:
+    push bc
+
+    ; Upper-left pixel
+    ld   a, [wram_player_x]
+    ld   b, a
+    ld   a, [wram_player_y]
+    ld   c, a
+    call CheckCollisionWithEnemySaw1AtPoint
+    jr z, .end
+
+    ; Upper-right pixel
+    ld   a, b
+    add  PLAYER_WIDTH + 1
+    ld   b, a
+    call CheckCollisionWithEnemySaw1AtPoint
+    jr   z, .end
+
+    ; Lower-right pixel
+    ld   a, c
+    add  PLAYER_HEIGHT + 1
+    ld   c, a
+    call CheckCollisionWithEnemySaw1AtPoint
+    jr   z, .end
+
+    ; Lower-left pixel
+    ld   a, b
+    sub  PLAYER_WIDTH
+    ld   b, a
+    call CheckCollisionWithEnemySaw1AtPoint
+
+.end
+    pop  bc
+    ret
+
+; --
+; -- Check Collision With Enemy Saw 1 At Point (Pixel Position)
+; --
+; -- @param b X position to check
+; -- @param c Y position to check
+; --
+CheckCollisionWithEnemySaw1AtPoint:
+
+    ; if X (b) > wEnemySaw1.x
+    ; if wEnemySaw1.x (a) < X (b)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.x]
+    cp   a, b
+    jr   nc, .end
+
+    ; if X (b) < wEnemySaw1.x + 8
+    ; if wEnemySaw1.x + 8 (a) > X (b)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.x]
+    add  7
+    cp   a, b
+    jr   c, .end
+
+    ; if Y (c) > wEnemySaw1.y
+    ; if wEnemySaw1.y (a) < Y (c)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.y]
+    cp   a, c
+    jr   nc, .end
+
+    ; if Y (c) < wEnedySaw1.y + 8
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.y]
+    add  7
+    cp   a, c
+    jr   c, .end
+
+    ; Collision!
+    call player_killed
+    ret
+
+.end
+    ; No collision
     ret
 
 ; --
