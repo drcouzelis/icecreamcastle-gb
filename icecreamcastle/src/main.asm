@@ -27,7 +27,7 @@ PLAYER_HEIGHT  EQU 7
 PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
 
 ; Enemy Saw movement speed
-ENEMY_SAW_SPEED_SUBPIXELS EQU %1000000 ; 0.5 in binary fraction
+ENEMY_SAW_SPEED_SUBPIXELS EQU %10000000 ; 0.5 in binary fraction
 ENEMY_SAW_ANIM_SPEED EQU 4 ; 4 is 15 FPS
 
 ; Jump up with a velocity of 2.75 pixels per frame
@@ -353,6 +353,9 @@ ResetLevel:
     ld   [wEnemySaw1.y], a
     ld   a, DIR_LEFT
     ld   [wEnemySaw1.dir], a
+    xor  a
+    ld   [wEnemySaw1.x_subpixels], a
+    ld   [wEnemySaw1.y_subpixels], a
 
     ; Init animation
     ld   a, ANIM_SPEED
@@ -947,17 +950,27 @@ UpdateEnemySaw1:
     cp   a, DIR_RIGHT
     jr   nz, .left
 .right
+    ld   a, [wEnemySaw1.x_subpixels]
+    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+    ld   [wEnemySaw1.x_subpixels], a
+    jr   nc, .check_bounce
     ld   hl, wEnemySaw1.x
     inc  [hl]
     jr   .check_bounce
 
 .left
+    ld   b, b
+    ld   a, [wEnemySaw1.x_subpixels]
+    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+    ld   [wEnemySaw1.x_subpixels], a
+    jr   nc, .check_bounce
     ld   hl, wEnemySaw1.x
     dec  [hl]
 
 .check_bounce
     ; if X == 8 * 15 then go LEFT
     ; if X == 8 * 8 then go RIGHT
+    ld   hl, wEnemySaw1.x
     ld   a, 8 * 15
     cp   a, [hl]
     jr   z, .bounce_left

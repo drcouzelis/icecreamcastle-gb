@@ -20,7 +20,7 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
   - [x] Animation
   - [x] Movement
   - [x] Collision detection with player
-  - [ ] Fix speed
+  - [x] Fix speed
   - [ ] ...add the second saw
 - [ ] Add laser enemies
 - [ ] Tries counter
