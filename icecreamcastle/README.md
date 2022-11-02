@@ -15,13 +15,13 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
 - [x] Physics / gravity
 - [x] Jumping
 - [x] Add spikes collision / death / restart
-- [ ] Add saw enemies
+- [x] Add saw enemies
   - [x] Add sprite to screen
   - [x] Animation
   - [x] Movement
   - [x] Collision detection with player
   - [x] Fix speed
-  - [ ] ...add the second saw
+  - [x] ...add the second saw
 - [ ] Add laser enemies
 - [ ] Tries counter
 - [ ] Sound effects

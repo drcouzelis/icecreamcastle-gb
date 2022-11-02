@@ -81,12 +81,19 @@ TARGET_OAM_FLAGS  EQU DMA_OAM + TARGET_OAM + OAMA_FLAGS
 
 ; Enemy Saw 1 sprite position in OAM
 ENEMYSAW1_OAM        EQU 2 * sizeof_OAM_ATTRS
-
 ; Enemy Saw 1 sprite position in OAM DMA memory
 ENEMYSAW1_OAM_TILEID EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_TILEID
 ENEMYSAW1_OAM_X      EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_X
 ENEMYSAW1_OAM_Y      EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_Y
 ENEMYSAW1_OAM_FLAGS  EQU DMA_OAM + ENEMYSAW1_OAM + OAMA_FLAGS
+
+; Enemy Saw 2 sprite position in OAM
+ENEMYSAW2_OAM        EQU 3 * sizeof_OAM_ATTRS
+; Enemy Saw 2 sprite position in OAM DMA memory
+ENEMYSAW2_OAM_TILEID EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_TILEID
+ENEMYSAW2_OAM_X      EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_X
+ENEMYSAW2_OAM_Y      EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_Y
+ENEMYSAW2_OAM_FLAGS  EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -252,11 +259,17 @@ game_loop:
     ld   a, [wram_player_facing]
     ld   [PLAYER_OAM_FLAGS], a
 
-    ; Update the enemy saw object
+    ; Update the enemy saw 1 object
     ld   a, [wEnemySaw1.x]
     ld   [ENEMYSAW1_OAM_X], a
     ld   a, [wEnemySaw1.y]
     ld   [ENEMYSAW1_OAM_Y], a
+
+    ; Update the enemy saw 2 object
+    ld   a, [wEnemySaw2.x]
+    ld   [ENEMYSAW2_OAM_X], a
+    ld   a, [wEnemySaw2.y]
+    ld   [ENEMYSAW2_OAM_Y], a
 
     ; Update the game animations
 
@@ -288,9 +301,14 @@ AnimateEnemySaw:
     ; %00000101
     ; %00000110
     ; %00000011
+    ; Enemy Saw 1
     ld   a, [ENEMYSAW1_OAM_TILEID]
     xor  a, $03 ; Toggle between sprites 5 and 6
     ld   [ENEMYSAW1_OAM_TILEID], a
+    ; Enemy Saw 2
+    ld   a, [ENEMYSAW2_OAM_TILEID]
+    xor  a, $03 ; Toggle between sprites 5 and 6
+    ld   [ENEMYSAW2_OAM_TILEID], a
     ; Reset the counter
     ld   a, ENEMY_SAW_ANIM_SPEED
     ld   [wEnemySawAnimation], a
@@ -307,8 +325,10 @@ AnimateEnemySaw:
 
     ; TODO: Check for collision with enemies / death
     call UpdateEnemySaw1
+    call UpdateEnemySaw2
 
     call CheckCollisionWithEnemySaw1
+    call CheckCollisionWithEnemySaw2
 
     ; Did the player die?
     ld   a, [wram_player_dead]
@@ -321,7 +341,7 @@ AnimateEnemySaw:
 
 .end
     call hDMA
-    jr   game_loop
+    jp   game_loop
 
 ; --
 ; -- Reset Level
@@ -347,15 +367,28 @@ ResetLevel:
     ; Reset the enemy saw 1 values
     ld   a, 5
     ld   [ENEMYSAW1_OAM_TILEID], a
-    ld   a, 8 * 15
+    ld   a, 8 * 13
     ld   [wEnemySaw1.x], a
     ld   a, 8 * 9
     ld   [wEnemySaw1.y], a
-    ld   a, DIR_LEFT
+    ld   a, DIR_RIGHT
     ld   [wEnemySaw1.dir], a
     xor  a
     ld   [wEnemySaw1.x_subpixels], a
     ld   [wEnemySaw1.y_subpixels], a
+
+    ; Reset the enemy saw 2 values
+    ld   a, 5
+    ld   [ENEMYSAW2_OAM_TILEID], a
+    ld   a, 8 * 11
+    ld   [wEnemySaw2.x], a
+    ld   a, 8 * 4
+    ld   [wEnemySaw2.y], a
+    ld   a, DIR_RIGHT
+    ld   [wEnemySaw2.dir], a
+    xor  a
+    ld   [wEnemySaw2.x_subpixels], a
+    ld   [wEnemySaw2.y_subpixels], a
 
     ; Init animation
     ld   a, ANIM_SPEED
@@ -938,8 +971,7 @@ player_killed:
     ret
 
 ; --
-; -- Update Enemy
-; --
+; -- Update Enemy Saw 1
 ; --
 UpdateEnemySaw1:
 
@@ -968,8 +1000,6 @@ UpdateEnemySaw1:
     dec  [hl]
 
 .check_bounce
-    ; if X == 8 * 15 then go LEFT
-    ; if X == 8 * 8 then go RIGHT
     ld   hl, wEnemySaw1.x
     ld   a, 8 * 15
     cp   a, [hl]
@@ -989,6 +1019,59 @@ UpdateEnemySaw1:
 .bounce_right
     ld   a, DIR_RIGHT
     ld   [wEnemySaw1.dir], a
+    jr   .end
+
+.end
+    ret
+
+; --
+; -- Update Enemy Saw 2
+; --
+UpdateEnemySaw2:
+
+    ld   a, [wEnemySaw2.dir]
+    cp   a, DIR_RIGHT
+    jr   nz, .left
+.right
+    ld   a, [wEnemySaw2.x_subpixels]
+    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+    ld   [wEnemySaw2.x_subpixels], a
+    jr   nc, .check_bounce
+    ld   hl, wEnemySaw2.x
+    inc  [hl]
+    jr   .check_bounce
+
+.left
+    ld   b, b
+    ld   a, [wEnemySaw2.x_subpixels]
+    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+    ld   [wEnemySaw2.x_subpixels], a
+    jr   nc, .check_bounce
+    ld   hl, wEnemySaw2.x
+    dec  [hl]
+
+.check_bounce
+    ; if X == 8 * 15 then go LEFT
+    ; if X == 8 * 8 then go RIGHT
+    ld   hl, wEnemySaw2.x
+    ld   a, 8 * 13
+    cp   a, [hl]
+    jr   z, .bounce_left
+
+    ld   a, 8 * 7
+    cp   a, [hl]
+    jr   z, .bounce_right
+
+    jr   .end
+
+.bounce_left
+    ld   a, DIR_LEFT
+    ld   [wEnemySaw2.dir], a
+    jr   .end
+
+.bounce_right
+    ld   a, DIR_RIGHT
+    ld   [wEnemySaw2.dir], a
     jr   .end
 
 .end
@@ -1027,6 +1110,44 @@ CheckCollisionWithEnemySaw1:
     sub  PLAYER_WIDTH
     ld   b, a
     call CheckCollisionWithEnemySaw1AtPoint
+
+.end
+    pop  bc
+    ret
+
+; --
+; -- Check Collision With Enemy Saw 2
+; --
+CheckCollisionWithEnemySaw2:
+    push bc
+
+    ; Upper-left pixel
+    ld   a, [wram_player_x]
+    ld   b, a
+    ld   a, [wram_player_y]
+    ld   c, a
+    call CheckCollisionWithEnemySaw2AtPoint
+    jr z, .end
+
+    ; Upper-right pixel
+    ld   a, b
+    add  PLAYER_WIDTH + 1
+    ld   b, a
+    call CheckCollisionWithEnemySaw2AtPoint
+    jr   z, .end
+
+    ; Lower-right pixel
+    ld   a, c
+    add  PLAYER_HEIGHT + 1
+    ld   c, a
+    call CheckCollisionWithEnemySaw2AtPoint
+    jr   z, .end
+
+    ; Lower-left pixel
+    ld   a, b
+    sub  PLAYER_WIDTH
+    ld   b, a
+    call CheckCollisionWithEnemySaw2AtPoint
 
 .end
     pop  bc
@@ -1075,6 +1196,38 @@ CheckCollisionWithEnemySaw1AtPoint:
 
 .end
     ; No collision
+    ret
+
+; --
+; -- Check Collision With Enemy Saw 2 At Point (Pixel Position)
+; --
+; -- @param b X position to check
+; -- @param c Y position to check
+; --
+CheckCollisionWithEnemySaw2AtPoint:
+
+    ld   a, [wEnemySaw2.x]
+    cp   a, b
+    jr   nc, .end
+
+    ld   a, [wEnemySaw2.x]
+    add  7
+    cp   a, b
+    jr   c, .end
+
+    ld   a, [wEnemySaw2.y]
+    cp   a, c
+    jr   nc, .end
+
+    ld   a, [wEnemySaw2.y]
+    add  7
+    cp   a, c
+    jr   c, .end
+
+    call player_killed
+    ret
+
+.end
     ret
 
 ; --
@@ -1276,15 +1429,21 @@ wEnemySawAnimation: db
 ; Middle section of the level
 ; 
 wEnemySaw1:
-    ;.active:      db
     .dir:         db ; Direction the saw is moving in
     .x:           db ; X pos
     .x_subpixels: db
     .y:           db ; Y pos
     .y_subpixels: db
-    ;.animation:   db
-    ;.visible:     db
-    ;.update:      dw
+
+; Enemy Saw 2
+; Middle section of the level
+; 
+wEnemySaw2:
+    .dir:         db ; Direction the saw is moving in
+    .x:           db ; X pos
+    .x_subpixels: db
+    .y:           db ; Y pos
+    .y_subpixels: db
 
 ; --
 ; -- Resources
