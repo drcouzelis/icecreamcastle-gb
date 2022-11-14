@@ -251,6 +251,9 @@ game_loop:
 
     ; Time to update the game!
 
+    ; Update the status of the lasers (part of the background layer)
+    call UpdateLasers
+
     ; Update the player object
     ; Player position
     ld   a, [wram_player_x]
@@ -329,7 +332,6 @@ AnimateEnemySaw:
     ; TODO: Check for collision with enemies / death
     call UpdateEnemySaw1
     call UpdateEnemySaw2
-    call UpdateLasers
 
     call CheckCollisionWithEnemySaw1
     call CheckCollisionWithEnemySaw2
