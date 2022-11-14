@@ -30,6 +30,9 @@ PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
 ENEMY_SAW_SPEED_SUBPIXELS EQU %10000000 ; 0.5 in binary fraction
 ENEMY_SAW_ANIM_SPEED EQU 4 ; 4 is 15 FPS
 
+; Countdown until the lasers toggle on or off
+LASER_SPEED EQU 60 ; Toggle lasers every second
+
 ; Jump up with a velocity of 2.75 pixels per frame
 PLAYER_JUMP_SPEED           EQU 2
 PLAYER_JUMP_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
@@ -202,8 +205,6 @@ start:
     ld   [TARGET_OAM_X], a
     ld   a, 8 * 7
     ld   [TARGET_OAM_Y], a
-    ;xor  a
-    ;ld   [TARGET_OAM_FLAGS], a
 
 ; Initialize more of the system
     ; Init palettes
@@ -245,6 +246,8 @@ game_loop:
 
     ; ...done waiting! Now clear the VBlank flag and continue
     ld   [wVBlankFlag], a
+
+    call hDMA
 
     ; Time to update the game!
 
@@ -326,9 +329,11 @@ AnimateEnemySaw:
     ; TODO: Check for collision with enemies / death
     call UpdateEnemySaw1
     call UpdateEnemySaw2
+    call UpdateLasers
 
     call CheckCollisionWithEnemySaw1
     call CheckCollisionWithEnemySaw2
+    call CheckCollisionWithLasers
 
     ; Did the player die?
     ld   a, [wram_player_dead]
@@ -340,7 +345,6 @@ AnimateEnemySaw:
     call ResetLevel
 
 .end
-    call hDMA
     jp   game_loop
 
 ; --
@@ -389,6 +393,11 @@ ResetLevel:
     xor  a
     ld   [wEnemySaw2.x_subpixels], a
     ld   [wEnemySaw2.y_subpixels], a
+
+    ; Init the lasers
+    ld   a, LASER_SPEED
+    ld   [wLasersCountdown], a
+    call EnableLasers
 
     ; Init animation
     ld   a, ANIM_SPEED
@@ -991,7 +1000,6 @@ UpdateEnemySaw1:
     jr   .check_bounce
 
 .left
-    ld   b, b
     ld   a, [wEnemySaw1.x_subpixels]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
     ld   [wEnemySaw1.x_subpixels], a
@@ -1042,7 +1050,6 @@ UpdateEnemySaw2:
     jr   .check_bounce
 
 .left
-    ld   b, b
     ld   a, [wEnemySaw2.x_subpixels]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
     ld   [wEnemySaw2.x_subpixels], a
@@ -1228,6 +1235,94 @@ CheckCollisionWithEnemySaw2AtPoint:
     ret
 
 .end
+    ret
+
+UpdateLasers:
+    ld   hl, wLasersCountdown
+    dec  [hl]
+    jr   nz, .end
+
+    ; Reset the laser countdown
+    ld   [hl], LASER_SPEED
+
+    ; Toggle the lasers
+    ld   a, [wLasersEnabled]
+    cp   0
+    jr   z, .enable_lasers
+
+    ; Disable lasers
+    ld   a, 1 ; 1 is the blank black background tile
+    call SetLasers
+    ld   hl, wLasersEnabled
+    ld   [hl], 0
+    jr .end
+
+.enable_lasers
+    ; Enable lasers
+    ld   a, 7 ; 7 is the laser tile
+    call SetLasers
+    ld   hl, wLasersEnabled
+    ld   [hl], 1
+
+.end
+    ret
+
+EnableLasers:
+    ; TODO: Can I load a laser sprite here?
+    ;ld   hl, _SCRN0
+    ;ld   a, 7
+    ;ld   [hl], a
+
+    ld   a, 7 ; 7 is the laser tile
+    call SetLasers
+
+    ld   hl, wLasersEnabled
+    ld   [hl], 1
+    ret
+
+DisableLasers:
+
+    ld   a, 1 ; 1 is the blank black background tile
+    call SetLasers
+
+    ld   hl, wLasersEnabled
+    ld   [hl], 0
+    ret
+
+SetLasers:
+    ; Top row laser
+    ld   hl, _SCRN0 + ((2 * SCRN_VX_B) + 9)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((3 * SCRN_VX_B) + 9)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((4 * SCRN_VX_B) + 9)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((5 * SCRN_VX_B) + 9)
+    ld   [hl], a
+
+    ; Bottom row left laser
+    ld   hl, _SCRN0 + ((12 * SCRN_VX_B) + 8)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((13 * SCRN_VX_B) + 8)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((14 * SCRN_VX_B) + 8)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((15 * SCRN_VX_B) + 8)
+    ld   [hl], a
+
+    ; Bottom row right laser
+    ld   hl, _SCRN0 + ((12 * SCRN_VX_B) + 12)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((13 * SCRN_VX_B) + 12)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((14 * SCRN_VX_B) + 12)
+    ld   [hl], a
+    ld   hl, _SCRN0 + ((15 * SCRN_VX_B) + 12)
+    ld   [hl], a
+
+    ret
+
+CheckCollisionWithLasers:
     ret
 
 ; --
@@ -1444,6 +1539,12 @@ wEnemySaw2:
     .x_subpixels: db
     .y:           db ; Y pos
     .y_subpixels: db
+
+; Lasers
+; Countdown to 0, then toggle the lasers
+;
+wLasersCountdown: db
+wLasersEnabled:   db
 
 ; --
 ; -- Resources
