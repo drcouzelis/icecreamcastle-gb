@@ -58,7 +58,9 @@ DIR_RIGHT EQU %00001000
 ; Background tiles
 ; The values map to the tile index number in VRAM
 TILE_BRICK  EQU 0 ; Bricks have collision detection
-TILE_SPIKES EQU 5 ; Spikes have collision only from left, bottom, right sides
+TILE_BLANK  EQU 1 ; The black background
+TILE_LASER  EQU 3
+TILE_SPIKES EQU 6 ; Spikes have collision only from left, bottom, right sides
 
 ; Video RAM
 VRAM_OAM_TILES        EQU _VRAM         ; $8000, used for OAM sprites
@@ -251,6 +253,15 @@ game_loop:
 
     ; Time to update the game!
 
+    ; Did the player die?
+    ld   a, [wram_player_dead]
+    cp   1
+    jr   nz, .noreset
+    ; The player DIED
+    ; Reset the current level so they can try again
+    call ResetLevel
+
+.noreset
     ; Update the status of the lasers (part of the background layer)
     call UpdateLasers
 
@@ -336,15 +347,6 @@ AnimateEnemySaw:
     call CheckCollisionWithEnemySaw1
     call CheckCollisionWithEnemySaw2
     call CheckCollisionWithLasers
-
-    ; Did the player die?
-    ld   a, [wram_player_dead]
-    cp   1
-    jr   nz, .end
-
-    ; The player DIED
-    ; Reset the current level so they can try again
-    call ResetLevel
 
 .end
     jp   game_loop
@@ -1253,7 +1255,7 @@ UpdateLasers:
     jr   z, .enable_lasers
 
     ; Disable lasers
-    ld   a, 1 ; 1 is the blank black background tile
+    ld   a, TILE_BLANK ; The blank black background tile
     call SetLasers
     ld   hl, wLasersEnabled
     ld   [hl], 0
@@ -1261,7 +1263,7 @@ UpdateLasers:
 
 .enable_lasers
     ; Enable lasers
-    ld   a, 7 ; 7 is the laser tile
+    ld   a, TILE_LASER ; Laser tile
     call SetLasers
     ld   hl, wLasersEnabled
     ld   [hl], 1
@@ -1270,25 +1272,11 @@ UpdateLasers:
     ret
 
 EnableLasers:
-    ; TODO: Can I load a laser sprite here?
-    ;ld   hl, _SCRN0
-    ;ld   a, 7
-    ;ld   [hl], a
-
-    ld   a, 7 ; 7 is the laser tile
+    ld   a, TILE_LASER
     call SetLasers
 
     ld   hl, wLasersEnabled
     ld   [hl], 1
-    ret
-
-DisableLasers:
-
-    ld   a, 1 ; 1 is the blank black background tile
-    call SetLasers
-
-    ld   hl, wLasersEnabled
-    ld   [hl], 0
     ret
 
 SetLasers:
@@ -1325,6 +1313,89 @@ SetLasers:
     ret
 
 CheckCollisionWithLasers:
+    push bc
+
+    ; If the lasers are off, skip the check
+    ld   a, [wLasersEnabled]
+    cp   0
+    jr   z, .end
+
+    ; Upper-left pixel
+    ld   a, [wram_player_x]
+    ld   b, a
+    ld   a, [wram_player_y]
+    ld   c, a
+    call CheckCollisionWithLasersAtPoint
+    jr z, .end
+
+    ; Upper-right pixel
+    ld   a, b
+    add  PLAYER_WIDTH
+    ld   b, a
+    call CheckCollisionWithLasersAtPoint
+    jr   z, .end
+
+    ; Lower-right pixel
+    ld   a, c
+    add  PLAYER_HEIGHT
+    ld   c, a
+    call CheckCollisionWithLasersAtPoint
+    jr   z, .end
+
+    ; Lower-left pixel
+    ld   a, b
+    sub  PLAYER_WIDTH
+    ld   b, a
+    call CheckCollisionWithLasersAtPoint
+
+.end
+    pop  bc
+    ret
+
+CheckCollisionWithLasersAtPoint:
+    push hl
+    push bc
+    push de
+
+    ; Check collision with lasers
+    ; The X position is offset by 8
+    ld   a, b
+    sub  OAM_X_OFS
+    ld   b, a
+    ; The Y position is offset by 16
+    ld   a, c
+    sub  OAM_Y_OFS
+    ld   c, a
+    divide_by_8 b
+    divide_by_8 c
+    ; Load the current level map into hl
+    ld   hl, resources.tilemap_level_01
+    ; Calculate "pos = (y * 32) + x"
+    ld   de, 32
+.loop
+    xor  a
+    or   c
+    ; End when Y position is 0
+    jr   z, .end_loop
+    ; Add a row of tile addresses (looped)
+    add  hl, de       
+    dec  c
+    jr   .loop
+.end_loop
+    ld   c, b
+    ld   b, a    ; bc now == b, the X position
+    add  hl, bc  ; Add X position
+    ; The background tile we need is now in hl
+    ld   a, TILE_LASER
+    cp   [hl]
+    jr   nz, .end
+    ; Player hit a laser!
+    call player_killed
+.end
+
+    pop  de
+    pop  bc
+    pop  hl
     ret
 
 ; --
