@@ -1,7 +1,7 @@
 ROM=icecreamcastle.gb
 SOURCES=main.asm
 OBJECTS=$(ROM:.gb=.o)
-RESOURCES=../resources
+RESOURCES=../res
 MAP=$(ROM:.gb=.map)
 SYMBOLS=$(ROM:.gb=.sym)
 
