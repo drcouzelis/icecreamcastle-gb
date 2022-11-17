@@ -340,13 +340,17 @@ AnimateEnemySaw:
     ; Check for collision with spikes / death
     call check_collisions_with_spikes
 
-    ; TODO: Check for collision with enemies / death
+    ; Update enemies
     call UpdateEnemySaw1
     call UpdateEnemySaw2
 
+    ; Check for collision with enemies / death
     call CheckCollisionWithEnemySaw1
     call CheckCollisionWithEnemySaw2
     call CheckCollisionWithLasers
+
+    ; Check for win condition
+    call CheckCollisionWithTarget
 
 .end
     jp   game_loop
@@ -872,6 +876,80 @@ test_player_collision_at_point:
 
     ret
 
+CheckCollisionWithTarget:
+    push bc
+
+    ; Upper-left pixel
+    ld   a, [wram_player_x]
+    ld   b, a
+    ld   a, [wram_player_y]
+    ld   c, a
+    call CheckCollisionWithTargetAtPoint
+    jr z, .end
+
+    ; Upper-right pixel
+    ld   a, b
+    add  PLAYER_WIDTH + 1
+    ld   b, a
+    call CheckCollisionWithTargetAtPoint
+    jr   z, .end
+
+    ; Lower-right pixel
+    ld   a, c
+    add  PLAYER_HEIGHT + 1
+    ld   c, a
+    call CheckCollisionWithTargetAtPoint
+    jr   z, .end
+
+    ; Lower-left pixel
+    ld   a, b
+    sub  PLAYER_WIDTH
+    ld   b, a
+    call CheckCollisionWithTargetAtPoint
+
+.end
+    pop  bc
+    ret
+
+CheckCollisionWithTargetAtPoint:
+
+    ; if X (b) > TARGET_OAM_X
+    ; if TARGET_OAM_X (a) < X (b)
+    ;   no -> jr .end
+    ld   a, [TARGET_OAM_X]
+    cp   a, b
+    jr   nc, .end
+
+    ; if X (b) < TARGET_OAM_X + 8
+    ; if TARGET_OAM_X + 8 (a) > X (b)
+    ;   no -> jr .end
+    ld   a, [TARGET_OAM_X]
+    add  7
+    cp   a, b
+    jr   c, .end
+
+    ; if Y (c) > TARGET_OAM_Y
+    ; if TARGET_OAM_Y (a) < Y (c)
+    ;   no -> jr .end
+    ld   a, [TARGET_OAM_Y]
+    cp   a, c
+    jr   nc, .end
+
+    ; if Y (c) < TARGET_OAM_Y + 8
+    ;   no -> jr .end
+    ld   a, [TARGET_OAM_Y]
+    add  7
+    cp   a, c
+    jr   c, .end
+
+    ; Collision!
+    call player_killed
+    ret
+
+.end
+    ; No collision
+    ret
+
 ; --
 ; -- Check Collisions With Spikes
 ; --
@@ -1194,7 +1272,7 @@ CheckCollisionWithEnemySaw1AtPoint:
     cp   a, c
     jr   nc, .end
 
-    ; if Y (c) < wEnedySaw1.y + 8
+    ; if Y (c) < wEnemySaw1.y + 8
     ;   no -> jr .end
     ld   a, [wEnemySaw1.y]
     add  7
