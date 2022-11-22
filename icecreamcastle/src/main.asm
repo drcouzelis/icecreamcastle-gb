@@ -16,12 +16,15 @@ INCLUDE "utilities.asm"
 ; --
 
 ; Player starting position on screen
-PLAYER_START_X EQU 48
-PLAYER_START_Y EQU 136
+PLAYER_START_X EQU 8 * 6
+PLAYER_START_Y EQU 8 * 17
 ANIM_SPEED     EQU 12 ; Frames until animation time, 12 is 5 FPS
 
 PLAYER_WIDTH   EQU 7
 PLAYER_HEIGHT  EQU 7
+
+TARGET_START_X EQU 8 * 8 ;16
+TARGET_START_Y EQU 8 * 17 ;7
 
 ; Number of pixels moved every frame when walking
 PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
@@ -203,9 +206,9 @@ start:
 ; Initialize the target (ice cream)
     ld   a, 2 ; The target image location in VRAM
     ld   [TARGET_OAM_TILEID], a
-    ld   a, 8 * 16
+    ld   a, TARGET_START_X
     ld   [TARGET_OAM_X], a
-    ld   a, 8 * 7
+    ld   a, TARGET_START_Y
     ld   [TARGET_OAM_Y], a
 
 ; Initialize more of the system
@@ -913,36 +916,37 @@ CheckCollisionWithTarget:
 
 CheckCollisionWithTargetAtPoint:
 
-    ; if X (b) > TARGET_OAM_X
-    ; if TARGET_OAM_X (a) < X (b)
+    ; if X (b) > TARGET_START_X
+    ; if TARGET_START_X (a) < X (b)
     ;   no -> jr .end
-    ld   a, [TARGET_OAM_X]
+    ld   a, TARGET_START_X
     cp   a, b
     jr   nc, .end
 
-    ; if X (b) < TARGET_OAM_X + 8
-    ; if TARGET_OAM_X + 8 (a) > X (b)
+    ; if X (b) < TARGET_START_X + 8
+    ; if TARGET_START_X + 8 (a) > X (b)
     ;   no -> jr .end
-    ld   a, [TARGET_OAM_X]
+    ld   a, TARGET_START_X
     add  7
     cp   a, b
     jr   c, .end
 
-    ; if Y (c) > TARGET_OAM_Y
-    ; if TARGET_OAM_Y (a) < Y (c)
+    ; if Y (c) > TARGET_START_Y
+    ; if TARGET_START_Y (a) < Y (c)
     ;   no -> jr .end
-    ld   a, [TARGET_OAM_Y]
+    ld   a, TARGET_START_Y
     cp   a, c
     jr   nc, .end
 
-    ; if Y (c) < TARGET_OAM_Y + 8
+    ; if Y (c) < TARGET_START_Y + 8
     ;   no -> jr .end
-    ld   a, [TARGET_OAM_Y]
+    ld   a, TARGET_START_Y
     add  7
     cp   a, c
     jr   c, .end
 
     ; Collision!
+    ; TODO: Replace with PlayerWin
     call player_killed
     ret
 
