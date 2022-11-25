@@ -2,7 +2,7 @@
 ; -- DMA OAM
 ; --
 
-; The address of the start of OAM in WRAM
+; The address I chose as the start of OAM in WRAM
 DMA_OAM EQU $C100
 
 ; --

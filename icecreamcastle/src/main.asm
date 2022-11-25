@@ -16,15 +16,17 @@ INCLUDE "utilities.asm"
 ; --
 
 ; Player starting position on screen
-PLAYER_START_X EQU 8 * 6
-PLAYER_START_Y EQU 8 * 17
-ANIM_SPEED     EQU 12 ; Frames until animation time, 12 is 5 FPS
+PLAYER_START_COL   EQU 6
+PLAYER_START_ROW   EQU 17
+PLAYER_ANIM_SPEED  EQU 12 ; Frames until animation time, 12 is 5 FPS
 
 PLAYER_WIDTH   EQU 7
 PLAYER_HEIGHT  EQU 7
 
-TARGET_START_X EQU 8 * 8 ;16
-TARGET_START_Y EQU 8 * 17 ;7
+TARGET_COL     EQU 16
+TARGET_ROW     EQU 7
+TARGET_START_X EQU 8 * TARGET_COL
+TARGET_START_Y EQU 8 * TARGET_ROW
 
 ; Number of pixels moved every frame when walking
 PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
@@ -58,8 +60,14 @@ DIR_DOWN  EQU %00000010
 DIR_LEFT  EQU %00000100
 DIR_RIGHT EQU %00001000
 
+; Sprite tiles
+; These values map to the tile index number in VRAM $8000
+SPRITE_PLAYER EQU 0
+SPRITE_TARGET EQU 2
+SPRITE_SAW    EQU 5
+
 ; Background tiles
-; The values map to the tile index number in VRAM
+; The values map to the tile index number in VRAM $9000
 TILE_BRICK  EQU 0 ; Bricks have collision detection
 TILE_BLANK  EQU 1 ; The black background
 TILE_LASER  EQU 3
@@ -130,7 +138,7 @@ SECTION "Header", ROM0[$0100]
 
 entry_point:
     nop
-    jp   start
+    jp   Start
 
 REPT $150 - @
     db   0
@@ -141,14 +149,16 @@ ENDR
 ; --
 SECTION "Game Code", ROM0[$0150]
 
-start:
+Start:
+
     ; Disable interrupts during setup
     di
 
     ; Wait for VBlank before starting setup
-    call wait_for_vblank
+    call WaitForVBlank
 
 ; Initialize the system
+
     xor  a
 
     ; Turn off the screen
@@ -157,61 +167,65 @@ start:
     ; Reset the VBLank flag
     ld   [wVBlankFlag], a
 
-    ; Set the X and Y positions of the background to 0
+    ; Set the X and Y positions of the background layer to 0
     ld   [rSCX], a
     ld   [rSCY], a
 
     ; Turn off sound (for now)
+    ; TODO: Add sound!
     ld   [rNR52], a
 
     ; OAM is all messy at initialization, clean it up
-    call clear_oam
+    call ResetOAM
 
     ; Initialize DMA
     call InitDMA
 
-    ; Load background tiles
+; Load all graphics
+
+    ; Load background tiles into VRAM
+    ; These are the actual tiles / pixels themselves
     ld   hl, VRAM_BACKGROUND_TILES
-    ld   de, resources.background_tiles
-    ld   bc, resources.end_background_tiles - resources.background_tiles
-    call copy_mem
+    ld   de, Level01Tiles
+    ld   bc, Level01Tiles.end - Level01Tiles
+    call CopyMem
 
-    ; Load the background tilemap
-    ; Starting at the top left corner of the background tilemap
+    ; Load the background tilemap into the background layer
+    ; Starting at the top left corner of the background layer
+    ; This maps tiles to a place in the background layer, to be drawn to the screen
     ld   hl, _SCRN0 ; $9800
-    ld   de, resources.tilemap_level_01
-    ld   bc, resources.end_tilemap_level_01 - resources.tilemap_level_01
-    call copy_mem
+    ld   de, Level01Tilemap
+    ld   bc, Level01Tilemap.end - Level01Tilemap
+    call CopyMem
 
-    ; Load sprite tiles
+    ; Load sprite tiles into VRAM
+    ; These are the actual tiles / pixels themselves, not the OAM mappings
     ld   hl, VRAM_OAM_TILES
-    ld   de, resources.sprite_tiles
-    ld   bc, resources.end_sprite_tiles - resources.sprite_tiles
-    call copy_mem
+    ld   de, SpriteTiles
+    ld   bc, SpriteTiles.end - SpriteTiles
+    call CopyMem
 
 ; Initialize the player
-    ; Reset all level parameters before starting the level
-    ; TODO: Reset to the CURRENT level (after making more levels)
-    call ResetLevel
-
-    ; Initialize the player object
-    xor  a
 
     ; Set the sprite tile number
+    ld   a, SPRITE_PLAYER
     ld   [PLAYER_OAM_TILEID], a
 
-    ; Set attributes
-    ld   [PLAYER_OAM_FLAGS], a
-
 ; Initialize the target (ice cream)
-    ld   a, 2 ; The target image location in VRAM
+
+    ld   a, SPRITE_TARGET
     ld   [TARGET_OAM_TILEID], a
     ld   a, TARGET_START_X
     ld   [TARGET_OAM_X], a
     ld   a, TARGET_START_Y
     ld   [TARGET_OAM_Y], a
 
+; Reset all level parameters before starting the level
+
+    call ResetLevel
+
 ; Initialize more of the system
+
     ; Init palettes
     ld   a, %00011011
 
@@ -221,7 +235,6 @@ start:
     ; Object palette 0
     ld   [rOBP0], a
 
-    ; Initialize the screen
     ; Turn the screen on, enable the OAM and BG layers
     ld   a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
     ld   [rLCDC], a
@@ -234,9 +247,13 @@ start:
 
     ; ...setup complete!
 
-game_loop:
+    ; Continue through to the main game loop
+
+GameLoop:
+
     ld   hl, wVBlankFlag
     xor  a
+
 .wait
     ; Wait for the VBlank interrupt
     halt
@@ -252,57 +269,48 @@ game_loop:
     ; ...done waiting! Now clear the VBlank flag and continue
     ld   [wVBlankFlag], a
 
+; Time to update the game!
+
+    ; Update the sprites in OAM using DMA
     call hDMA
 
-    ; Time to update the game!
-
     ; Did the player die?
-    ld   a, [wram_player_dead]
+    ld   a, [wPlayerDead]
     cp   1
-    jr   nz, .noreset
+    jr   nz, .nodead
     ; The player DIED
     ; Reset the current level so they can try again
+    di
+    call WaitForVBlank
     call ResetLevel
+    ei
+.nodead
 
-.noreset
+    ; Did the player win?
+    ld   a, [wPlayerWin]
+    cp   1
+    jr   nz, .nowin
+
+    call VictoryScreen
+.nowin
+
     ; Update the status of the lasers (part of the background layer)
     call UpdateLasers
 
-    ; Update the player object
-    ; Player position
-    ld   a, [wram_player_x]
-    ld   [PLAYER_OAM_X], a
-    ld   a, [wram_player_y]
-    ld   [PLAYER_OAM_Y], a
-
-    ; Direction facing
-    ld   a, [wram_player_facing]
-    ld   [PLAYER_OAM_FLAGS], a
-
-    ; Update the enemy saw 1 object
-    ld   a, [wEnemySaw1.x]
-    ld   [ENEMYSAW1_OAM_X], a
-    ld   a, [wEnemySaw1.y]
-    ld   [ENEMYSAW1_OAM_Y], a
-
-    ; Update the enemy saw 2 object
-    ld   a, [wEnemySaw2.x]
-    ld   [ENEMYSAW2_OAM_X], a
-    ld   a, [wEnemySaw2.y]
-    ld   [ENEMYSAW2_OAM_Y], a
+    call UpdateOAM
 
     ; Update the game animations
 
 Animate:
     ; Is it time to animate?
-    ld   hl, wram_animation_counter
+    ld   hl, wPlayerAnimCounter
     dec  [hl]
     jr   nz, .no_animation
 
     ; Animate!
 
     ; Reset the animation counter
-    ld   [hl], ANIM_SPEED
+    ld   [hl], PLAYER_ANIM_SPEED
     ld   a, [PLAYER_OAM_TILEID]
 
     ; Toggle the animation frame for the player
@@ -314,7 +322,7 @@ Animate:
 .no_animation
 
 AnimateEnemySaw:
-    ld   hl, wEnemySawAnimation
+    ld   hl, wEnemySawAnimCounter
     dec  [hl]
     jr   nz, .no_saw_animation
 
@@ -331,11 +339,11 @@ AnimateEnemySaw:
     ld   [ENEMYSAW2_OAM_TILEID], a
     ; Reset the counter
     ld   a, ENEMY_SAW_ANIM_SPEED
-    ld   [wEnemySawAnimation], a
+    ld   [wEnemySawAnimCounter], a
 .no_saw_animation
 
     ; Get player input
-    call read_keys
+    call ReadKeys
 
     ; Update the player location and map collision
     call UpdatePlayer
@@ -356,7 +364,34 @@ AnimateEnemySaw:
     call CheckCollisionWithTarget
 
 .end
-    jp   game_loop
+    jp   GameLoop
+
+UpdateOAM:
+
+    ; Update the player object
+    ; Player position
+    ld   a, [wPlayerX]
+    ld   [PLAYER_OAM_X], a
+    ld   a, [wPlayerY]
+    ld   [PLAYER_OAM_Y], a
+
+    ; Direction facing
+    ld   a, [wPlayerFacing]
+    ld   [PLAYER_OAM_FLAGS], a
+
+    ; Update the enemy saw 1 object
+    ld   a, [wEnemySaw1.x]
+    ld   [ENEMYSAW1_OAM_X], a
+    ld   a, [wEnemySaw1.y]
+    ld   [ENEMYSAW1_OAM_Y], a
+
+    ; Update the enemy saw 2 object
+    ld   a, [wEnemySaw2.x]
+    ld   [ENEMYSAW2_OAM_X], a
+    ld   a, [wEnemySaw2.y]
+    ld   [ENEMYSAW2_OAM_Y], a
+
+    ret
 
 ; --
 ; -- Reset Level
@@ -364,23 +399,22 @@ AnimateEnemySaw:
 ; -- Reset the current level
 ; --
 ResetLevel:
-    ; Load default player X Position
-    ld   a, PLAYER_START_X
-    ld   [wram_player_x], a
 
-    ; Load default player Y Position
-    ld   a, PLAYER_START_Y
-    ld   [wram_player_y], a
+    ; Load default player position
+    ld   a, 8 * PLAYER_START_COL
+    ld   [wPlayerX], a
+    ld   a, 8 * PLAYER_START_ROW
+    ld   [wPlayerY], a
 
     ; Reset player values
     xor  a
-    ld   [wram_player_x_subpixels], a
-    ld   [wram_player_y_subpixels], a
-    ld   [wram_player_facing], a      ; 0 is facing right
-    ld   [wram_player_jumping], a     ; 0 is "not jumping"
+    ld   [wPlayerXSub], a
+    ld   [wPlayerYSub], a
+    ld   [wPlayerFacing], a
+    ld   [wPlayerJumping], a
 
     ; Reset the enemy saw 1 values
-    ld   a, 5
+    ld   a, SPRITE_SAW
     ld   [ENEMYSAW1_OAM_TILEID], a
     ld   a, 8 * 13
     ld   [wEnemySaw1.x], a
@@ -389,11 +423,11 @@ ResetLevel:
     ld   a, DIR_RIGHT
     ld   [wEnemySaw1.dir], a
     xor  a
-    ld   [wEnemySaw1.x_subpixels], a
-    ld   [wEnemySaw1.y_subpixels], a
+    ld   [wEnemySaw1.x_sub], a
+    ld   [wEnemySaw1.y_sub], a
 
     ; Reset the enemy saw 2 values
-    ld   a, 5
+    ld   a, SPRITE_SAW
     ld   [ENEMYSAW2_OAM_TILEID], a
     ld   a, 8 * 11
     ld   [wEnemySaw2.x], a
@@ -402,25 +436,30 @@ ResetLevel:
     ld   a, DIR_RIGHT
     ld   [wEnemySaw2.dir], a
     xor  a
-    ld   [wEnemySaw2.x_subpixels], a
-    ld   [wEnemySaw2.y_subpixels], a
+    ld   [wEnemySaw2.x_sub], a
+    ld   [wEnemySaw2.y_sub], a
 
     ; Init the lasers
     ld   a, LASER_SPEED
-    ld   [wLasersCountdown], a
+    ld   [wLasersFlashCount], a
     call EnableLasers
 
     ; Init animation
-    ld   a, ANIM_SPEED
-    ld   [wram_animation_counter], a
+    ld   a, PLAYER_ANIM_SPEED
+    ld   [wPlayerAnimCounter], a
 
     ld   a, ENEMY_SAW_ANIM_SPEED
-    ld   [wEnemySawAnimation], a
+    ld   [wEnemySawAnimCounter], a
 
     ; Revive the player
     xor  a
-    ld   [wram_player_dead], a
+    ld   [wPlayerDead], a
 
+    ret
+
+VictoryScreen:
+    ; TODO: Wait until a button is pressed
+    ;jr   nz, VictoryScreen
     ret
 
 ; --
@@ -433,14 +472,14 @@ ResetLevel:
 ; -- @param \1 One of the four directions
 ; --
 MACRO test_player_collision_going
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
 IF \1 == DIR_LEFT
     dec  a
 ELIF \1 == DIR_RIGHT
     inc  a
 ENDC
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
 IF \1 == DIR_UP
     dec  a
 ELIF \1 == DIR_DOWN
@@ -448,7 +487,7 @@ ELIF \1 == DIR_DOWN
 ENDC
     ld   c, a
     ld   a, \1
-    ld   [wram_player_direction], a
+    ld   [wPlayerDir], a
     call test_player_collision
 ENDM
 
@@ -462,7 +501,7 @@ ENDM
 UpdatePlayer:
 
 ; RIGHT
-    ld   a, [wram_keys]
+    ld   a, [wKeys]
     and  PADF_RIGHT
     jr   nz, .end_right
 
@@ -470,12 +509,12 @@ UpdatePlayer:
 
     ; Face right
     xor  a
-    ld   [wram_player_facing], a
+    ld   [wPlayerFacing], a
 
     ; Calculate the player's new position
-    ld   a, [wram_player_x_subpixels]
+    ld   a, [wPlayerXSub]
     add  PLAYER_WALK_SPEED_SUBPIXELS
-    ld   [wram_player_x_subpixels], a
+    ld   [wPlayerXSub], a
     jr   nc, .end_right
 
     ; Check for map collision
@@ -483,12 +522,12 @@ UpdatePlayer:
     jr   z, .end_right
 
     ; Move the player right
-    ld   hl, wram_player_x
+    ld   hl, wPlayerX
     inc  [hl]
 .end_right
     
 ; LEFT
-    ld   a, [wram_keys]
+    ld   a, [wKeys]
     and  PADF_LEFT
     jr   nz, .end_left
 
@@ -496,12 +535,12 @@ UpdatePlayer:
 
     ; Face left
     ld   a, OAMF_XFLIP
-    ld   [wram_player_facing], a
+    ld   [wPlayerFacing], a
 
     ; Calculate the player's new position
-    ld   a, [wram_player_x_subpixels]
+    ld   a, [wPlayerXSub]
     sub  PLAYER_WALK_SPEED_SUBPIXELS
-    ld   [wram_player_x_subpixels], a
+    ld   [wPlayerXSub], a
     jr   nc, .end_left
 
     ; Check for map collision
@@ -509,7 +548,7 @@ UpdatePlayer:
     jr   z, .end_left
 
     ; Move the player left
-    ld   hl, wram_player_x
+    ld   hl, wPlayerX
     dec  [hl]
 .end_left
 
@@ -522,7 +561,7 @@ UpdatePlayer:
     ;           Set DY to the initial jumping speed
 
     ; JUMP / A
-    ld   a, [wram_keys]
+    ld   a, [wKeys]
     and  PADF_A
     jr   nz, .end_button_a
 
@@ -534,15 +573,15 @@ UpdatePlayer:
     ; The player is standing on solid ground and is trying to jump
     ; Set jumping parameters
     ld   a, 1
-    ld   [wram_player_jumping], a
+    ld   [wPlayerJumping], a
     ld   a, PLAYER_JUMP_SPEED
-    ld   [wram_player_dy], a
+    ld   [wPlayerDY], a
     ld   a, PLAYER_JUMP_SPEED_SUBPIXELS
-    ld   [wram_player_dy_subpixels], a
+    ld   [wPlayerDYSub], a
 
     ; Clear any leftover subpixel movement, for consistent jumping
     xor  a
-    ld   [wram_player_y_subpixels], a
+    ld   [wPlayerYSub], a
 .end_button_a
     
 ; APPLY GRAVITY
@@ -561,19 +600,19 @@ UpdatePlayer:
     ; This section ONLY changes speed, NOT the actual Y position
 
     ; Is the player moving upwards (jumping) or down?
-    ld   a, [wram_player_jumping]
+    ld   a, [wPlayerJumping]
     cp   0
     jr   z, .going_down
 
     ; The player is jumping up
-    ld   a, [wram_player_dy_subpixels]
+    ld   a, [wPlayerDYSub]
     sub  GRAVITY_SPEED_SUBPIXELS
-    ld   [wram_player_dy_subpixels], a
-    ld   a, [wram_player_dy]
+    ld   [wPlayerDYSub], a
+    ld   a, [wPlayerDY]
     ; Subtract the carry bit from DY...
     sbc  0
     ; ...and store it
-    ld   [wram_player_dy], a
+    ld   [wPlayerDY], a
 
     ; Check if the upward velocity has gone below 0
     jr   nc, EndGravity
@@ -582,9 +621,9 @@ UpdatePlayer:
     ; Start coming back down!
     ; Clear the velocity and start falling
     xor  a
-    ld   [wram_player_jumping], a
-    ld   [wram_player_dy], a
-    ld   [wram_player_dy_subpixels], a
+    ld   [wPlayerJumping], a
+    ld   [wPlayerDY], a
+    ld   [wPlayerDYSub], a
     jr   EndGravity
 
 .going_down
@@ -595,25 +634,25 @@ UpdatePlayer:
 
     ; On solid, clear velocity and skip to the next section
     xor  a
-    ld   [wram_player_y_subpixels], a
-    ld   [wram_player_dy], a
+    ld   [wPlayerYSub], a
+    ld   [wPlayerDY], a
     ; The subpixel position SHOULD be cleared to 0, but we instead
     ; give it a little bit of an offset
     ; This prevents a glitch where you can walk over single tile gaps
     ld   a, GRAVITY_OFFSET_SUBPIXELS
-    ld   [wram_player_dy_subpixels], a
+    ld   [wPlayerDYSub], a
     jr   EndGravity
 
 .no_collision_down
     ; The player is falling down
-    ld   a, [wram_player_dy_subpixels]
+    ld   a, [wPlayerDYSub]
     add  GRAVITY_SPEED_SUBPIXELS
-    ld   [wram_player_dy_subpixels], a
-    ld   a, [wram_player_dy]
+    ld   [wPlayerDYSub], a
+    ld   a, [wPlayerDY]
     ; Add the carry bit to DY...
     adc  0
     ; ...and store it
-    ld   [wram_player_dy], a
+    ld   [wPlayerDY], a
     ; Test for terminal velocity here!
     ; Don't go faster than terminal velocity
     cp   a, GRAVITY_MAX_SPEED
@@ -622,10 +661,10 @@ UpdatePlayer:
 
     ; Cap the speed to GRAVITY_MAX_SPEED
     ; Cap it to the max speed so you don't fall at excessive speeds
-    ld   [wram_player_dy], a
+    ld   [wPlayerDY], a
     xor  a
     ; Zero out the subpixel speed
-    ld   [wram_player_dy_subpixels], a
+    ld   [wPlayerDYSub], a
 
 EndGravity:
 
@@ -639,18 +678,18 @@ EndGravity:
     ; N -> Move the player DOWN according to DY
 
     ; Is the player moving upwards (jumping) or down?
-    ld   a, [wram_player_jumping]
+    ld   a, [wPlayerJumping]
     cp   0
     jr   z, _update_player__vertical_movement_down
 
 _update_player__vertical_movement_up:
     ; The player is jumping up
-    ld a, [wram_player_dy_subpixels]
+    ld a, [wPlayerDYSub]
     ld b, a
-    ld a, [wram_player_y_subpixels]
+    ld a, [wPlayerYSub]
     sub b ; Subtract DY Fudge from Y Fudge
-    ld [wram_player_y_subpixels], a ; ...and store it
-    ld a, [wram_player_dy]
+    ld [wPlayerYSub], a ; ...and store it
+    ld a, [wPlayerDY]
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
@@ -668,7 +707,7 @@ _update_player__vertical_movement_up:
     pop bc
     jr z, _update_player__vertical_collision_up ; Collision! Skip movement
     ; Move one pixel up
-    ld hl, wram_player_y
+    ld hl, wPlayerY
     dec [hl]
     dec b
     jr .loop
@@ -678,9 +717,9 @@ _update_player__vertical_collision_up:
     ; The player bonked his head!
     ; Cancel the jump
     xor a
-    ld [wram_player_jumping], a
-    ld [wram_player_dy], a
-    ld [wram_player_dy_subpixels], a
+    ld [wPlayerJumping], a
+    ld [wPlayerDY], a
+    ld [wPlayerDYSub], a
     jr _update_player__end_vertical_movement
 
 _update_player__vertical_movement_down:
@@ -692,12 +731,12 @@ _update_player__vertical_movement_down:
     ; taking Carry into consideration...
     ; DY doesn't change, unless the player lands on a solid surface
     ;
-    ld a, [wram_player_dy_subpixels]
+    ld a, [wPlayerDYSub]
     ld b, a
-    ld a, [wram_player_y_subpixels]
+    ld a, [wPlayerYSub]
     add b ; Add DY Fudge to Y Fudge
-    ld [wram_player_y_subpixels], a ; ...and store it
-    ld a, [wram_player_dy]
+    ld [wPlayerYSub], a ; ...and store it
+    ld a, [wPlayerDY]
     adc 0 ; Add any carry from fudge
     ; Move, one pixel at a time
     ld b, a ; b is my counter
@@ -714,7 +753,7 @@ _update_player__vertical_movement_down:
     pop bc
     jr z, _update_player__end_vertical_movement ; Collision! Skip movement
     ; Move one pixel down
-    ld hl, wram_player_y
+    ld hl, wPlayerY
     inc [hl]
     dec b
     jr .loop
@@ -825,7 +864,7 @@ test_player_collision_at_point:
     divide_by_8 c
 
     ; Load the current level map into hl
-    ld hl, resources.tilemap_level_01
+    ld hl, Level01Tilemap
 
     ; Calculate "pos = (y * 32) + x"
     ld de, 32
@@ -864,7 +903,7 @@ test_player_collision_at_point:
     ; spikes coming from above (and you'll die)
 
     ; Is the player moving downwards?
-    ld   a, [wram_player_direction]
+    ld   a, [wPlayerDir]
     and  DIR_DOWN
     jr   nz, .end ; ...no! Test for spike collision...
 
@@ -883,9 +922,9 @@ CheckCollisionWithTarget:
     push bc
 
     ; Upper-left pixel
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
     ld   c, a
     call CheckCollisionWithTargetAtPoint
     jr z, .end
@@ -916,42 +955,35 @@ CheckCollisionWithTarget:
 
 CheckCollisionWithTargetAtPoint:
 
-    ; if X (b) > TARGET_START_X
-    ; if TARGET_START_X (a) < X (b)
-    ;   no -> jr .end
-    ld   a, TARGET_START_X
+    push bc
+
+    ; Check collision with the target
+    ;; The X position is offset by 8
+    ;ld   a, b
+    ;sub  OAM_X_OFS
+    ;ld   b, a
+    ;; The Y position is offset by 16
+    ;ld   a, c
+    ;sub  OAM_Y_OFS
+    ;ld   c, a
+    divide_by_8 b
+    divide_by_8 c
+
+    ; Check the X position
+    ld   a, TARGET_COL
     cp   a, b
-    jr   nc, .end
+    jr   nz, .end
 
-    ; if X (b) < TARGET_START_X + 8
-    ; if TARGET_START_X + 8 (a) > X (b)
-    ;   no -> jr .end
-    ld   a, TARGET_START_X
-    add  7
-    cp   a, b
-    jr   c, .end
-
-    ; if Y (c) > TARGET_START_Y
-    ; if TARGET_START_Y (a) < Y (c)
-    ;   no -> jr .end
-    ld   a, TARGET_START_Y
+    ; Check the Y position
+    ld   a, TARGET_ROW
     cp   a, c
-    jr   nc, .end
+    jr   nz, .end
 
-    ; if Y (c) < TARGET_START_Y + 8
-    ;   no -> jr .end
-    ld   a, TARGET_START_Y
-    add  7
-    cp   a, c
-    jr   c, .end
-
-    ; Collision!
-    ; TODO: Replace with PlayerWin
-    call player_killed
-    ret
+    ; The player touched the target!
+    call PlayerWon
 
 .end
-    ; No collision
+    pop  bc
     ret
 
 ; --
@@ -966,9 +998,9 @@ check_collisions_with_spikes:
     push bc
 
     ; Upper-left pixel
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
     ld   c, a
     call check_collision_with_spikes_at_point
     jr z, .end
@@ -1024,7 +1056,7 @@ check_collision_with_spikes_at_point:
     divide_by_8 b
     divide_by_8 c
     ; Load the current level map into hl
-    ld   hl, resources.tilemap_level_01
+    ld   hl, Level01Tilemap
     ; Calculate "pos = (y * 32) + x"
     ld   de, 32
 .loop
@@ -1045,12 +1077,19 @@ check_collision_with_spikes_at_point:
     cp   [hl] ; Collision with spikes going up, left, right? If yes, set z
     jr   nz, .end
     ; Player hit spikes!
-    call player_killed
+    call PlayerKilled
 .end
 
     pop  de
     pop  bc
     pop  hl
+    ret
+
+PlayerWon:
+    ld   a, 1
+    ; TODO
+    ;ld   [wPlayerWin], a
+    ld   [wPlayerDead], a
     ret
 
 ; --
@@ -1060,9 +1099,9 @@ check_collision_with_spikes_at_point:
 ; --
 ; -- @side a Modified
 ; --
-player_killed:
+PlayerKilled:
     ld   a, 1
-    ld   [wram_player_dead], a
+    ld   [wPlayerDead], a
     ret
 
 ; --
@@ -1071,24 +1110,24 @@ player_killed:
 UpdateEnemySaw1:
 
     ; TODO: The saw should be moving at the speed of ENEMY_SAW_SPEED_SUBPIXELS
-    ;       using wEnemySaw1.x_subpixels
+    ;       using wEnemySaw1.x_sub
 
     ld   a, [wEnemySaw1.dir]
     cp   a, DIR_RIGHT
     jr   nz, .left
 .right
-    ld   a, [wEnemySaw1.x_subpixels]
+    ld   a, [wEnemySaw1.x_sub]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw1.x_subpixels], a
+    ld   [wEnemySaw1.x_sub], a
     jr   nc, .check_bounce
     ld   hl, wEnemySaw1.x
     inc  [hl]
     jr   .check_bounce
 
 .left
-    ld   a, [wEnemySaw1.x_subpixels]
+    ld   a, [wEnemySaw1.x_sub]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw1.x_subpixels], a
+    ld   [wEnemySaw1.x_sub], a
     jr   nc, .check_bounce
     ld   hl, wEnemySaw1.x
     dec  [hl]
@@ -1127,18 +1166,18 @@ UpdateEnemySaw2:
     cp   a, DIR_RIGHT
     jr   nz, .left
 .right
-    ld   a, [wEnemySaw2.x_subpixels]
+    ld   a, [wEnemySaw2.x_sub]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw2.x_subpixels], a
+    ld   [wEnemySaw2.x_sub], a
     jr   nc, .check_bounce
     ld   hl, wEnemySaw2.x
     inc  [hl]
     jr   .check_bounce
 
 .left
-    ld   a, [wEnemySaw2.x_subpixels]
+    ld   a, [wEnemySaw2.x_sub]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw2.x_subpixels], a
+    ld   [wEnemySaw2.x_sub], a
     jr   nc, .check_bounce
     ld   hl, wEnemySaw2.x
     dec  [hl]
@@ -1177,9 +1216,9 @@ CheckCollisionWithEnemySaw1:
     push bc
 
     ; Upper-left pixel
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
     ld   c, a
     call CheckCollisionWithEnemySaw1AtPoint
     jr z, .end
@@ -1215,9 +1254,9 @@ CheckCollisionWithEnemySaw2:
     push bc
 
     ; Upper-left pixel
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
     ld   c, a
     call CheckCollisionWithEnemySaw2AtPoint
     jr z, .end
@@ -1284,7 +1323,7 @@ CheckCollisionWithEnemySaw1AtPoint:
     jr   c, .end
 
     ; Collision!
-    call player_killed
+    call PlayerKilled
     ret
 
 .end
@@ -1317,14 +1356,14 @@ CheckCollisionWithEnemySaw2AtPoint:
     cp   a, c
     jr   c, .end
 
-    call player_killed
+    call PlayerKilled
     ret
 
 .end
     ret
 
 UpdateLasers:
-    ld   hl, wLasersCountdown
+    ld   hl, wLasersFlashCount
     dec  [hl]
     jr   nz, .end
 
@@ -1403,9 +1442,9 @@ CheckCollisionWithLasers:
     jr   z, .end
 
     ; Upper-left pixel
-    ld   a, [wram_player_x]
+    ld   a, [wPlayerX]
     ld   b, a
-    ld   a, [wram_player_y]
+    ld   a, [wPlayerY]
     ld   c, a
     call CheckCollisionWithLasersAtPoint
     jr z, .end
@@ -1451,7 +1490,7 @@ CheckCollisionWithLasersAtPoint:
     divide_by_8 b
     divide_by_8 c
     ; Load the current level map into hl
-    ld   hl, resources.tilemap_level_01
+    ld   hl, Level01Tilemap
     ; Calculate "pos = (y * 32) + x"
     ld   de, 32
 .loop
@@ -1472,73 +1511,12 @@ CheckCollisionWithLasersAtPoint:
     cp   [hl]
     jr   nz, .end
     ; Player hit a laser!
-    call player_killed
+    call PlayerKilled
 .end
 
     pop  de
     pop  bc
     pop  hl
-    ret
-
-; --
-; -- Wait For VBlank
-; --
-; -- Wait for VBlank
-; -- The screen can only be updated during VBlank
-; --
-; -- @side a Modified
-; --
-wait_for_vblank:
-    ; Get the Y coordinate that is currently been drawn...
-    ld   a, [rLY]
-    ; ...and is it equal to the number of rows on the screen?
-    cp   SCRN_Y
-    jr   nz, wait_for_vblank
-    ret
-
-; --
-; -- Copy Mem
-; --
-; -- Copy memory from one section to another
-; --
-; -- @param hl The destination address
-; -- @param de The source address
-; -- @param bc The number of bytes to copy
-; -- @side a, bc, de, hl Modified
-; --
-copy_mem:
-    ; Grab 1 byte from the source
-    ld   a, [de]
-    ; Place it at the destination, then increment hl
-    ldi  [hl], a
-    ; Move to the next byte
-    inc  de
-    ; Decrement the counter
-    dec  bc
-    ; "dec bc" doesn't update flags
-    ; These two instructions check if bc is 0
-    ld   a, b
-    or   c
-    jr   nz, copy_mem
-    ret
-
-; --
-; -- Clear OAM
-; --
-; -- Set all values in OAM to 0
-; -- Because OAM is filled with garbage at startup
-; --
-; -- @side a, b, hl Modified
-; --
-clear_oam:
-    ld   hl, _OAMRAM
-    ; OAM is 40 sprites, 4 bytes each
-    ld   b, OAM_COUNT * sizeof_OAM_ATTRS
-    xor  a
-.loop
-    ldi  [hl], a
-    dec  b
-    jr   nz, .loop
     ret
 
 ; --
@@ -1548,23 +1526,23 @@ clear_oam:
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
 ; -- Use "and PADF_<KEYNAME>", if Z is set then the key is pressed
 ; --
-; -- @return wram_keys The eight inputs, 0 means pressed
-; -- @side a Modified
+; -- @return wKeys The eight inputs, 0 means pressed
 ; --
-read_keys:
+ReadKeys:
     push hl
 
     ; Results will be stored in hl
-    ld   hl, wram_keys
+    ld   hl, wKeys
 
-_read_keys__d_pad:
     ; Read D-pad (Down, Up, Left, Right)
     ld   a, P1F_GET_DPAD
     ld   [rP1], a
 
-    ; Read multiple times to ensure button presses are received
+    ; Use REPT to read the values multiple times to ensure
+    ; button presses are recorded
+
+    ; Read the input from rP1, 0 means pressed
 REPT 2
-    ; Read the input, 0 means pressed
     ld   a, [rP1]
 ENDR
     or   %11110000
@@ -1573,14 +1551,11 @@ ENDR
     ; Store the result
     ld   [hl], a
 
-_read_keys__buttons:
     ; Read buttons (Start, Select, B, A)
     ld   a, P1F_GET_BTN
     ld   [rP1], a
 
-    ; Read multiple times to ensure button presses are received
 REPT 6
-    ; Read the input, 0 means pressed
     ld   a, [rP1]
 ENDR
     or   %11110000
@@ -1606,119 +1581,90 @@ SECTION "Game State Variables", WRAM0
 wVBlankFlag: db
 
 ; If unset then it is time to animate the sprites
-wram_animation_counter: db
+wPlayerAnimCounter: db
 
 ; The currently pressed keys, updated every game loop
-wram_keys: db
+wKeys: db
 
 ; --
 ; -- Player
 ; --
 
-wram_player:
-
-    ; Player X position
-    .x:           db
-    .x_subpixels: db
-
-    ; Player Y position
-    .y:           db
-    .y_subpixels: db
-
-    ; Player Y speed
-    .dy:           db
-    .dy_subpixels: db
-
-    ; The direction the player is facing, 0 for right, OAMF_XFLIP for left
-    .facing: db
-
-    ; Set if the player is currently jumping up (moving in an upwards motion)
-    .jumping: db
-
-    ; The direction the player is currently moving (U, D, L, R)
-    ; Can change mid-frame, for example, when jumping to the right
-    ; Used when moving pixel by pixel
-    .direction: db
-
-    ; Set to 1 if the player is dead
-    .dead: db
-
-; Player X position
-wram_player_x:           db
-wram_player_x_subpixels: db
-
-; Player Y position
-wram_player_y:           db
-wram_player_y_subpixels: db
+; Player position, plus subpixel position
+wPlayerX:    db
+wPlayerXSub: db
+wPlayerY:    db
+wPlayerYSub: db
 
 ; Player Y speed
-wram_player_dy:           db
-wram_player_dy_subpixels: db
+wPlayerDY:    db
+wPlayerDYSub: db
 
 ; The direction the player is facing, 0 for right, OAMF_XFLIP for left
-wram_player_facing: db
+wPlayerFacing: db
 
 ; Set if the player is currently jumping up (moving in an upwards motion)
-wram_player_jumping: db
+wPlayerJumping: db
 
 ; The direction the player is currently moving (U, D, L, R)
 ; Can change mid-frame, for example, when jumping to the right
 ; Used when moving pixel by pixel
-wram_player_direction: db
+wPlayerDir: db
 
 ; Set to 1 if the player is dead
-wram_player_dead: db
+wPlayerDead: db
+
+; Set to 1 if the player won
+wPlayerWin: db
 
 ; --
 ; -- Enemies
 ; --
 
-wEnemySawAnimation: db
-
 ; Enemy Saw 1
 ; Middle section of the level
 ; 
 wEnemySaw1:
-    .dir:         db ; Direction the saw is moving in
-    .x:           db ; X pos
-    .x_subpixels: db
-    .y:           db ; Y pos
-    .y_subpixels: db
+.dir:         db ; Direction the saw is moving in
+.x:           db ; X pos
+.x_sub: db
+.y:           db ; Y pos
+.y_sub: db
 
 ; Enemy Saw 2
 ; Middle section of the level
 ; 
 wEnemySaw2:
-    .dir:         db ; Direction the saw is moving in
-    .x:           db ; X pos
-    .x_subpixels: db
-    .y:           db ; Y pos
-    .y_subpixels: db
+.dir:         db ; Direction the saw is moving in
+.x:           db ; X pos
+.x_sub: db
+.y:           db ; Y pos
+.y_sub: db
+
+wEnemySawAnimCounter: db
 
 ; Lasers
 ; Countdown to 0, then toggle the lasers
 ;
-wLasersCountdown: db
-wLasersEnabled:   db
+wLasersFlashCount: db
+wLasersEnabled:    db
 
 ; --
 ; -- Resources
 ; --
 SECTION "Resources", ROM0
 
-resources:
-
 ; Background tiles
-.background_tiles
+Level01Tiles:
 INCBIN "tiles-background.2bpp"
-.end_background_tiles
+.end
 
 ; Sprite tiles
-.sprite_tiles
+SpriteTiles:
 INCBIN "tiles-sprites.2bpp"
-.end_sprite_tiles
+.end
 
 ; Map, level 01
-.tilemap_level_01
+Level01Tilemap:
 INCBIN "tilemap-level-01.map"
-.end_tilemap_level_01
+.end
