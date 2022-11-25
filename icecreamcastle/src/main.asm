@@ -313,18 +313,14 @@ GameLoop:
     call UpdatePlayer
 
     ; Check for win condition
-    call CheckCollisionWithTarget
+    call CheckTarget
 
-    ; Check for collision with spikes / death
-    ; TODO
-    ;call CheckCollisionWithBG
-    call CheckCollisionWithSpikes
-    call CheckCollisionWithLasers
+    ; Check for collision with spikes and lasers
+    call CheckTraps
 
-    ; Check for collision with enemies / death
-    ; TODO
-    ;call CheckCollisionWithEnemies
-    call CheckCollisionWithEnemySaw1
+    ; Check for collision with enemies
+    call CheckEnemies
+    ; TODO: Put collision detection for Saw 2 with Saw 1
     call CheckCollisionWithEnemySaw2
 
     ; Update enemies
@@ -510,7 +506,7 @@ ENDC
     ld   c, a
     ld   a, \1
     ld   [wPlayerDir], a
-    call CheckPlayerCollision
+    call CheckTerrain
 ENDM
 
 ; --
@@ -785,19 +781,20 @@ _update_player__end_vertical_movement:
     ret
 
 ; --
-; -- Check Player Collision
+; -- Check Terrain
 ; --
-; -- Test for collision of an 8x8 tile with a background map tile
+; -- Check for player collision with the level terrain
 ; --
 ; -- @param b X position to test
 ; -- @param c Y position to test
 ; -- @return z Set if collision
 ; --
-CheckPlayerCollision:
+CheckTerrain:
+
     ; Upper-left pixel
     ; b is already set to the needed X position
     ; c is already set to the needed Y position
-    call CheckPlayerCollisionAtPoint
+    call CheckTerrainAtPoint
     ret  z
 
     ; Upper-right pixel
@@ -805,7 +802,7 @@ CheckPlayerCollision:
     ld   a, b
     add  PLAYER_WIDTH
     ld   b, a
-    call CheckPlayerCollisionAtPoint
+    call CheckTerrainAtPoint
     ret  z
 
     ; Lower-right pixel
@@ -813,7 +810,7 @@ CheckPlayerCollision:
     ld   a, c
     add  PLAYER_HEIGHT
     ld   c, a
-    call CheckPlayerCollisionAtPoint
+    call CheckTerrainAtPoint
     ret  z
 
     ; Lower-left pixel
@@ -821,25 +818,26 @@ CheckPlayerCollision:
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call CheckPlayerCollisionAtPoint
+    call CheckTerrainAtPoint
 
     ; Just return the answer, regardless of what the result is
     ; at this point
     ret
 
 ; --
-; -- Check Player Collision At Point (Pixel Position)
+; -- Check Terrain At Point
 ; --
-; -- Test for collision of a pixel with a background map tile
+; -- Check for collision of a pixel with a background map tile
 ; -- or the edge of the screen
 ; -- Takes into account the direction of movement
-; -- The given X/Y position will be adjusted with the Gameboy screen offsets
+; -- The given X and Y positions will be adjusted with the screen offsets
 ; --
 ; -- @param b X position to check
 ; -- @param c Y position to check
 ; -- @return z Set if collision
 ; --
-CheckPlayerCollisionAtPoint:
+CheckTerrainAtPoint:
+
     push hl
     push bc
     push de
@@ -932,13 +930,15 @@ CheckPlayerCollisionAtPoint:
     cp   [hl]
 
 .end
+
     pop  de
     pop  bc
     pop  hl
 
     ret
 
-CheckCollisionWithTarget:
+CheckTarget:
+
     push bc
 
     ; Upper-left pixel
@@ -946,35 +946,43 @@ CheckCollisionWithTarget:
     ld   b, a
     ld   a, [wPlayerY]
     ld   c, a
-    call CheckCollisionWithTargetAtPoint
+    call CheckTargetAtPoint
     jr z, .end
 
     ; Upper-right pixel
     ld   a, b
     add  PLAYER_WIDTH + 1
     ld   b, a
-    call CheckCollisionWithTargetAtPoint
+    call CheckTargetAtPoint
     jr   z, .end
 
     ; Lower-right pixel
     ld   a, c
     add  PLAYER_HEIGHT + 1
     ld   c, a
-    call CheckCollisionWithTargetAtPoint
+    call CheckTargetAtPoint
     jr   z, .end
 
     ; Lower-left pixel
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call CheckCollisionWithTargetAtPoint
+    call CheckTargetAtPoint
 
 .end
     pop  bc
     ret
 
-CheckCollisionWithTargetAtPoint:
-
+; --
+; -- Check Target At Point
+; --
+; -- Test for collision of a pixel with the target / goal
+; --
+; -- @param b X position to check
+; -- @param c Y position to check
+; -- @return z Set if collision
+; --
+CheckTargetAtPoint:
     push bc
 
     divide_by_8 b
@@ -998,13 +1006,13 @@ CheckCollisionWithTargetAtPoint:
     ret
 
 ; --
-; -- Check Collisions With Spikes
+; -- Check Traps
 ; --
-; -- Test for player collision with spikes
+; -- Check for player collision with traps (spikes, lasers)
 ; --
 ; -- @return z Set if collision
 ; --
-CheckCollisionWithSpikes:
+CheckTraps:
 
     push bc
 
@@ -1013,44 +1021,44 @@ CheckCollisionWithSpikes:
     ld   b, a
     ld   a, [wPlayerY]
     ld   c, a
-    call CheckCollisionWithSpikesAtPoint
+    call CheckTrapsAtPoint
     jr z, .end
 
     ; Upper-right pixel
     ld   a, b
     add  PLAYER_WIDTH
     ld   b, a
-    call CheckCollisionWithSpikesAtPoint
+    call CheckTrapsAtPoint
     jr   z, .end
 
     ; Lower-right pixel
     ld   a, c
     add  PLAYER_HEIGHT
     ld   c, a
-    call CheckCollisionWithSpikesAtPoint
+    call CheckTrapsAtPoint
     jr   z, .end
 
     ; Lower-left pixel
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call CheckCollisionWithSpikesAtPoint
+    call CheckTrapsAtPoint
 
 .end
     pop  bc
     ret
 
 ; --
-; -- Check Collision With Spikes At Point (Pixel Position)
+; -- Check Traps At Point
 ; --
-; -- Test for player collisions with spikes at a specific pixel
+; -- Check for player collisions with traps at a specific pixel
 ; --
 ; -- @param b X position to check
 ; -- @param c Y position to check
 ; -- @return z Set if collision
-; -- @side a Modified
 ; --
-CheckCollisionWithSpikesAtPoint:
+CheckTrapsAtPoint:
+
     push hl
     push bc
     push de
@@ -1080,20 +1088,47 @@ CheckCollisionWithSpikesAtPoint:
     dec  c
     jr   .loop
 .end_loop
+
     ld   c, b
     ld   b, a    ; bc now == b, the X position
     add  hl, bc  ; Add X position
+
     ; The background tile we need is now in hl
+
+; Check for collision with lasers
+
+    ; Check collision with lasers first
+    ; otherwise z may be set incorrectly for the return
+
+    ; If the lasers are off, skip the check
+    ld   a, [wLasersEnabled]
+    cp   0
+    jr   z, .end_lasers
+
+    ld   a, TILE_LASER
+    cp   [hl]
+    jr   nz, .end_lasers
+
+    ; Player hit a laser!
+    call PlayerKilled
+
+.end_lasers
+
+; Check for collision with spikes
+
     ld   a, TILE_SPIKES
-    cp   [hl] ; Collision with spikes going up, left, right? If yes, set z
-    jr   nz, .end
+    cp   [hl]
+    jr   nz, .end_spikes
+
     ; Player hit spikes!
     call PlayerKilled
-.end
+
+.end_spikes
 
     pop  de
     pop  bc
     pop  hl
+
     ret
 
 PlayerWon:
@@ -1107,8 +1142,6 @@ PlayerWon:
 ; -- Player Killed
 ; --
 ; -- Mark that the player has been killed
-; --
-; -- @side a Modified
 ; --
 PlayerKilled:
     ld   a, 1
@@ -1223,7 +1256,8 @@ UpdateEnemySaw2:
 ; --
 ; -- Check Collision With Enemy Saw 1
 ; --
-CheckCollisionWithEnemySaw1:
+CheckEnemies:
+
     push bc
 
     ; Upper-left pixel
@@ -1231,31 +1265,77 @@ CheckCollisionWithEnemySaw1:
     ld   b, a
     ld   a, [wPlayerY]
     ld   c, a
-    call CheckCollisionWithEnemySaw1AtPoint
+    call CheckEnemiesAtPoint
     jr z, .end
 
     ; Upper-right pixel
     ld   a, b
     add  PLAYER_WIDTH + 1
     ld   b, a
-    call CheckCollisionWithEnemySaw1AtPoint
+    call CheckEnemiesAtPoint
     jr   z, .end
 
     ; Lower-right pixel
     ld   a, c
     add  PLAYER_HEIGHT + 1
     ld   c, a
-    call CheckCollisionWithEnemySaw1AtPoint
+    call CheckEnemiesAtPoint
     jr   z, .end
 
     ; Lower-left pixel
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call CheckCollisionWithEnemySaw1AtPoint
+    call CheckEnemiesAtPoint
 
 .end
     pop  bc
+    ret
+
+; --
+; -- Check Enemies At Point
+; --
+; -- Check for collision with enemies (saws) at a specific pixel
+; --
+; -- @param b X position to check
+; -- @param c Y position to check
+; --
+CheckEnemiesAtPoint:
+
+    ; if X (b) > wEnemySaw1.x
+    ; if wEnemySaw1.x (a) < X (b)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.x]
+    cp   a, b
+    jr   nc, .end
+
+    ; if X (b) < wEnemySaw1.x + 8
+    ; if wEnemySaw1.x + 8 (a) > X (b)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.x]
+    add  7
+    cp   a, b
+    jr   c, .end
+
+    ; if Y (c) > wEnemySaw1.y
+    ; if wEnemySaw1.y (a) < Y (c)
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.y]
+    cp   a, c
+    jr   nc, .end
+
+    ; if Y (c) < wEnemySaw1.y + 8
+    ;   no -> jr .end
+    ld   a, [wEnemySaw1.y]
+    add  7
+    cp   a, c
+    jr   c, .end
+
+    ; Collision!
+    call PlayerKilled
+
+.end
+    ; No collision
     ret
 
 ; --
@@ -1297,57 +1377,14 @@ CheckCollisionWithEnemySaw2:
     ret
 
 ; --
-; -- Check Collision With Enemy Saw 1 At Point (Pixel Position)
-; --
-; -- @param b X position to check
-; -- @param c Y position to check
-; --
-CheckCollisionWithEnemySaw1AtPoint:
-
-    ; if X (b) > wEnemySaw1.x
-    ; if wEnemySaw1.x (a) < X (b)
-    ;   no -> jr .end
-    ld   a, [wEnemySaw1.x]
-    cp   a, b
-    jr   nc, .end
-
-    ; if X (b) < wEnemySaw1.x + 8
-    ; if wEnemySaw1.x + 8 (a) > X (b)
-    ;   no -> jr .end
-    ld   a, [wEnemySaw1.x]
-    add  7
-    cp   a, b
-    jr   c, .end
-
-    ; if Y (c) > wEnemySaw1.y
-    ; if wEnemySaw1.y (a) < Y (c)
-    ;   no -> jr .end
-    ld   a, [wEnemySaw1.y]
-    cp   a, c
-    jr   nc, .end
-
-    ; if Y (c) < wEnemySaw1.y + 8
-    ;   no -> jr .end
-    ld   a, [wEnemySaw1.y]
-    add  7
-    cp   a, c
-    jr   c, .end
-
-    ; Collision!
-    call PlayerKilled
-    ret
-
-.end
-    ; No collision
-    ret
-
-; --
 ; -- Check Collision With Enemy Saw 2 At Point (Pixel Position)
 ; --
 ; -- @param b X position to check
 ; -- @param c Y position to check
 ; --
 CheckCollisionWithEnemySaw2AtPoint:
+
+; Enemy Saw 2
 
     ld   a, [wEnemySaw2.x]
     cp   a, b
@@ -1442,92 +1479,6 @@ SetLasers:
     ld   hl, _SCRN0 + ((15 * SCRN_VX_B) + 12)
     ld   [hl], a
 
-    ret
-
-CheckCollisionWithLasers:
-    push bc
-
-    ; If the lasers are off, skip the check
-    ld   a, [wLasersEnabled]
-    cp   0
-    jr   z, .end
-
-    ; Upper-left pixel
-    ld   a, [wPlayerX]
-    ld   b, a
-    ld   a, [wPlayerY]
-    ld   c, a
-    call CheckCollisionWithLasersAtPoint
-    jr z, .end
-
-    ; Upper-right pixel
-    ld   a, b
-    add  PLAYER_WIDTH
-    ld   b, a
-    call CheckCollisionWithLasersAtPoint
-    jr   z, .end
-
-    ; Lower-right pixel
-    ld   a, c
-    add  PLAYER_HEIGHT
-    ld   c, a
-    call CheckCollisionWithLasersAtPoint
-    jr   z, .end
-
-    ; Lower-left pixel
-    ld   a, b
-    sub  PLAYER_WIDTH
-    ld   b, a
-    call CheckCollisionWithLasersAtPoint
-
-.end
-    pop  bc
-    ret
-
-CheckCollisionWithLasersAtPoint:
-    push hl
-    push bc
-    push de
-
-    ; Check collision with lasers
-    ; The X position is offset by 8
-    ld   a, b
-    sub  OAM_X_OFS
-    ld   b, a
-    ; The Y position is offset by 16
-    ld   a, c
-    sub  OAM_Y_OFS
-    ld   c, a
-    divide_by_8 b
-    divide_by_8 c
-    ; Load the current level map into hl
-    ld   hl, Level01Tilemap
-    ; Calculate "pos = (y * 32) + x"
-    ld   de, 32
-.loop
-    xor  a
-    or   c
-    ; End when Y position is 0
-    jr   z, .end_loop
-    ; Add a row of tile addresses (looped)
-    add  hl, de       
-    dec  c
-    jr   .loop
-.end_loop
-    ld   c, b
-    ld   b, a    ; bc now == b, the X position
-    add  hl, bc  ; Add X position
-    ; The background tile we need is now in hl
-    ld   a, TILE_LASER
-    cp   [hl]
-    jr   nz, .end
-    ; Player hit a laser!
-    call PlayerKilled
-.end
-
-    pop  de
-    pop  bc
-    pop  hl
     ret
 
 ; --
@@ -1636,21 +1587,21 @@ wPlayerWin: db
 ; Middle section of the level
 ; 
 wEnemySaw1:
-.dir:         db ; Direction the saw is moving in
-.x:           db ; X pos
-.x_sub: db
-.y:           db ; Y pos
-.y_sub: db
+.x:         db ; X pos
+.x_sub:     db
+.y:         db ; Y pos
+.y_sub:     db
+.dir:       db ; Direction the saw is moving in
 
 ; Enemy Saw 2
 ; Middle section of the level
 ; 
 wEnemySaw2:
-.dir:         db ; Direction the saw is moving in
-.x:           db ; X pos
-.x_sub: db
-.y:           db ; Y pos
-.y_sub: db
+.x:         db ; X pos
+.x_sub:     db
+.y:         db ; Y pos
+.y_sub:     db
+.dir:       db ; Direction the saw is moving in
 
 wEnemySawAnimCounter: db
 
