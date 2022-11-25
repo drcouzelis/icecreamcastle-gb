@@ -277,70 +277,34 @@ GameLoop:
     ; Did the player die?
     ld   a, [wPlayerDead]
     cp   1
-    jr   nz, .nodead
+    jr   nz, .notdead
+
     ; The player DIED
     ; Reset the current level so they can try again
     di
     call WaitForVBlank
     call ResetLevel
     ei
-.nodead
+.notdead
 
     ; Did the player win?
     ld   a, [wPlayerWin]
     cp   1
-    jr   nz, .nowin
+    jr   nz, .notwon
 
     call VictoryScreen
-.nowin
+.notwon
 
     ; Update the status of the lasers (part of the background layer)
     call UpdateLasers
 
+    ; Update the game animations
+    call AnimatePlayer
+
+    ; Sync the WRAM variables with DMA
     call UpdateOAM
 
-    ; Update the game animations
-
-Animate:
-    ; Is it time to animate?
-    ld   hl, wPlayerAnimCounter
-    dec  [hl]
-    jr   nz, .no_animation
-
-    ; Animate!
-
-    ; Reset the animation counter
-    ld   [hl], PLAYER_ANIM_SPEED
-    ld   a, [PLAYER_OAM_TILEID]
-
-    ; Toggle the animation frame for the player
-    xor  a, $01
-    ld   [PLAYER_OAM_TILEID], a
-    ; ...and the target
-    add  2 ; The target sprites start at location 2
-    ld   [TARGET_OAM_TILEID], a
-.no_animation
-
-AnimateEnemySaw:
-    ld   hl, wEnemySawAnimCounter
-    dec  [hl]
-    jr   nz, .no_saw_animation
-
-    ; %00000101
-    ; %00000110
-    ; %00000011
-    ; Enemy Saw 1
-    ld   a, [ENEMYSAW1_OAM_TILEID]
-    xor  a, $03 ; Toggle between sprites 5 and 6
-    ld   [ENEMYSAW1_OAM_TILEID], a
-    ; Enemy Saw 2
-    ld   a, [ENEMYSAW2_OAM_TILEID]
-    xor  a, $03 ; Toggle between sprites 5 and 6
-    ld   [ENEMYSAW2_OAM_TILEID], a
-    ; Reset the counter
-    ld   a, ENEMY_SAW_ANIM_SPEED
-    ld   [wEnemySawAnimCounter], a
-.no_saw_animation
+    call AnimateEnemies
 
     ; Get player input
     call ReadKeys
@@ -348,20 +312,24 @@ AnimateEnemySaw:
     ; Update the player location and map collision
     call UpdatePlayer
 
+    ; Check for win condition
+    call CheckCollisionWithTarget
+
     ; Check for collision with spikes / death
-    call check_collisions_with_spikes
+    ; TODO
+    ;call CheckCollisionWithBG
+    call CheckCollisionWithSpikes
+    call CheckCollisionWithLasers
+
+    ; Check for collision with enemies / death
+    ; TODO
+    ;call CheckCollisionWithEnemies
+    call CheckCollisionWithEnemySaw1
+    call CheckCollisionWithEnemySaw2
 
     ; Update enemies
     call UpdateEnemySaw1
     call UpdateEnemySaw2
-
-    ; Check for collision with enemies / death
-    call CheckCollisionWithEnemySaw1
-    call CheckCollisionWithEnemySaw2
-    call CheckCollisionWithLasers
-
-    ; Check for win condition
-    call CheckCollisionWithTarget
 
 .end
     jp   GameLoop
@@ -390,6 +358,60 @@ UpdateOAM:
     ld   [ENEMYSAW2_OAM_X], a
     ld   a, [wEnemySaw2.y]
     ld   [ENEMYSAW2_OAM_Y], a
+
+    ret
+
+AnimatePlayer:
+
+    ; Is it time to animate?
+    ld   hl, wPlayerAnimCounter
+    dec  [hl]
+    jr   nz, .end
+
+    ; Animate!
+
+    ; Reset the animation counter
+    ld   [hl], PLAYER_ANIM_SPEED
+
+    ; Toggle the animation frame for the player
+    ld   a, [PLAYER_OAM_TILEID]
+    xor  a, $01
+    ld   [PLAYER_OAM_TILEID], a
+
+    ; ...and the target
+    ld   a, [TARGET_OAM_TILEID]
+    xor  a, $01
+    ld   [TARGET_OAM_TILEID], a
+
+.end
+
+    ret
+
+AnimateEnemies:
+
+    ld   hl, wEnemySawAnimCounter
+    dec  [hl]
+    jr   nz, .end
+
+    ; %00000101 -> frame 1
+    ; %00000110 -> frame 2
+    ; %00000011 -> apply this xor to toggle
+
+    ; Enemy Saw 1
+    ld   a, [ENEMYSAW1_OAM_TILEID]
+    xor  a, $03 ; Toggle between sprites 5 and 6
+    ld   [ENEMYSAW1_OAM_TILEID], a
+
+    ; Enemy Saw 2
+    ld   a, [ENEMYSAW2_OAM_TILEID]
+    xor  a, $03 ; Toggle between sprites 5 and 6
+    ld   [ENEMYSAW2_OAM_TILEID], a
+
+    ; Reset the counter
+    ld   a, ENEMY_SAW_ANIM_SPEED
+    ld   [wEnemySawAnimCounter], a
+
+.end
 
     ret
 
@@ -488,7 +510,7 @@ ENDC
     ld   c, a
     ld   a, \1
     ld   [wPlayerDir], a
-    call test_player_collision
+    call CheckPlayerCollision
 ENDM
 
 ; --
@@ -763,20 +785,19 @@ _update_player__end_vertical_movement:
     ret
 
 ; --
-; -- Test Player Collision
+; -- Check Player Collision
 ; --
 ; -- Test for collision of an 8x8 tile with a background map tile
 ; --
 ; -- @param b X position to test
 ; -- @param c Y position to test
 ; -- @return z Set if collision
-; -- @side a Modified
 ; --
-test_player_collision:
+CheckPlayerCollision:
     ; Upper-left pixel
     ; b is already set to the needed X position
     ; c is already set to the needed Y position
-    call test_player_collision_at_point
+    call CheckPlayerCollisionAtPoint
     ret  z
 
     ; Upper-right pixel
@@ -784,7 +805,7 @@ test_player_collision:
     ld   a, b
     add  PLAYER_WIDTH
     ld   b, a
-    call test_player_collision_at_point
+    call CheckPlayerCollisionAtPoint
     ret  z
 
     ; Lower-right pixel
@@ -792,7 +813,7 @@ test_player_collision:
     ld   a, c
     add  PLAYER_HEIGHT
     ld   c, a
-    call test_player_collision_at_point
+    call CheckPlayerCollisionAtPoint
     ret  z
 
     ; Lower-left pixel
@@ -800,14 +821,14 @@ test_player_collision:
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call test_player_collision_at_point
+    call CheckPlayerCollisionAtPoint
 
     ; Just return the answer, regardless of what the result is
     ; at this point
     ret
 
 ; --
-; -- Test Player Collision At Point (Pixel Position)
+; -- Check Player Collision At Point (Pixel Position)
 ; --
 ; -- Test for collision of a pixel with a background map tile
 ; -- or the edge of the screen
@@ -817,14 +838,13 @@ test_player_collision:
 ; -- @param b X position to check
 ; -- @param c Y position to check
 ; -- @return z Set if collision
-; -- @side a Modified
 ; --
-test_player_collision_at_point:
+CheckPlayerCollisionAtPoint:
     push hl
     push bc
     push de
 
-    ; Check if off screen
+    ; Check if off screen / bound the player to the screen
 
     ; Is the X position == 0?
     ld   a, 0 + (OAM_X_OFS - 1)
@@ -957,15 +977,6 @@ CheckCollisionWithTargetAtPoint:
 
     push bc
 
-    ; Check collision with the target
-    ;; The X position is offset by 8
-    ;ld   a, b
-    ;sub  OAM_X_OFS
-    ;ld   b, a
-    ;; The Y position is offset by 16
-    ;ld   a, c
-    ;sub  OAM_Y_OFS
-    ;ld   c, a
     divide_by_8 b
     divide_by_8 c
 
@@ -992,9 +1003,9 @@ CheckCollisionWithTargetAtPoint:
 ; -- Test for player collision with spikes
 ; --
 ; -- @return z Set if collision
-; -- @side a Modified
 ; --
-check_collisions_with_spikes:
+CheckCollisionWithSpikes:
+
     push bc
 
     ; Upper-left pixel
@@ -1002,28 +1013,28 @@ check_collisions_with_spikes:
     ld   b, a
     ld   a, [wPlayerY]
     ld   c, a
-    call check_collision_with_spikes_at_point
+    call CheckCollisionWithSpikesAtPoint
     jr z, .end
 
     ; Upper-right pixel
     ld   a, b
     add  PLAYER_WIDTH
     ld   b, a
-    call check_collision_with_spikes_at_point
+    call CheckCollisionWithSpikesAtPoint
     jr   z, .end
 
     ; Lower-right pixel
     ld   a, c
     add  PLAYER_HEIGHT
     ld   c, a
-    call check_collision_with_spikes_at_point
+    call CheckCollisionWithSpikesAtPoint
     jr   z, .end
 
     ; Lower-left pixel
     ld   a, b
     sub  PLAYER_WIDTH
     ld   b, a
-    call check_collision_with_spikes_at_point
+    call CheckCollisionWithSpikesAtPoint
 
 .end
     pop  bc
@@ -1039,7 +1050,7 @@ check_collisions_with_spikes:
 ; -- @return z Set if collision
 ; -- @side a Modified
 ; --
-check_collision_with_spikes_at_point:
+CheckCollisionWithSpikesAtPoint:
     push hl
     push bc
     push de
