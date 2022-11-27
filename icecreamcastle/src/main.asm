@@ -327,7 +327,8 @@ GameLoop:
     ld   hl, wEnemySaw1
     call UpdateEnemySaw
     ld   hl, wEnemySaw2
-    call UpdateEnemySaw
+    ;call UpdateEnemySaw
+    call UpdateEnemySaw2
 
 .end
     jp   GameLoop
