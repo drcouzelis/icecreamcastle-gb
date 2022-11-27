@@ -324,8 +324,10 @@ GameLoop:
     call CheckCollisionWithEnemySaw2
 
     ; Update enemies
-    call UpdateEnemySaw1
-    call UpdateEnemySaw2
+    ld   hl, wEnemySaw1
+    call UpdateEnemySaw
+    ld   hl, wEnemySaw2
+    call UpdateEnemySaw
 
 .end
     jp   GameLoop
@@ -1151,33 +1153,51 @@ PlayerKilled:
 ; --
 ; -- Update Enemy Saw 1
 ; --
+UpdateEnemySaw:
 UpdateEnemySaw1:
 
-    ; TODO: The saw should be moving at the speed of ENEMY_SAW_SPEED_SUBPIXELS
-    ;       using wEnemySaw1.x_sub
+    ; For reference...
+    ;wEnemySaw1:
+    ;.x:         db ; X position
+    ;.y:         db ; Y position
+    ;.x_sub:     db ; Sub-pixel positions
+    ;.y_sub:     db
+    ;.dir:       db ; Direction moving
 
-    ld   a, [wEnemySaw1.dir]
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl ; dir
+    ld   a, [hl]
     cp   a, DIR_RIGHT
     jr   nz, .left
-.right
-    ld   a, [wEnemySaw1.x_sub]
+
+; right
+    dec  hl
+    dec  hl ; x_sub
+    ld   a, [hl]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw1.x_sub], a
+    ld   [hl], a
+    dec  hl
+    dec  hl ; x
     jr   nc, .check_bounce
-    ld   hl, wEnemySaw1.x
+
     inc  [hl]
     jr   .check_bounce
 
 .left
-    ld   a, [wEnemySaw1.x_sub]
+    dec  hl
+    dec  hl ; x_sub
+    ld   a, [hl]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw1.x_sub], a
+    ld   [hl], a
+    dec  hl
+    dec  hl ; x
     jr   nc, .check_bounce
-    ld   hl, wEnemySaw1.x
+
     dec  [hl]
 
 .check_bounce
-    ld   hl, wEnemySaw1.x
     ld   a, 8 * 15
     cp   a, [hl]
     jr   z, .bounce_left
@@ -1185,21 +1205,72 @@ UpdateEnemySaw1:
     ld   a, 8 * 8
     cp   a, [hl]
     jr   z, .bounce_right
-
-    jr   .end
+    ret
 
 .bounce_left
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl ; dir
     ld   a, DIR_LEFT
-    ld   [wEnemySaw1.dir], a
+    ld   [hl], a
     jr   .end
 
 .bounce_right
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl ; dir
     ld   a, DIR_RIGHT
-    ld   [wEnemySaw1.dir], a
+    ld   [hl], a
     jr   .end
 
 .end
     ret
+
+;    ld   a, [wEnemySaw1.dir]
+;    cp   a, DIR_RIGHT
+;    jr   nz, .left
+;; right
+;    ld   a, [wEnemySaw1.x_sub]
+;    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+;    ld   [wEnemySaw1.x_sub], a
+;    jr   nc, .check_bounce
+;    ld   hl, wEnemySaw1.x
+;    inc  [hl]
+;    jr   .check_bounce
+;
+;.left
+;    ld   a, [wEnemySaw1.x_sub]
+;    add  a, ENEMY_SAW_SPEED_SUBPIXELS
+;    ld   [wEnemySaw1.x_sub], a
+;    jr   nc, .check_bounce
+;    ld   hl, wEnemySaw1.x
+;    dec  [hl]
+;
+;.check_bounce
+;    ld   hl, wEnemySaw1.x
+;    ld   a, 8 * 15
+;    cp   a, [hl]
+;    jr   z, .bounce_left
+;
+;    ld   a, 8 * 8
+;    cp   a, [hl]
+;    jr   z, .bounce_right
+;    ret
+;
+;.bounce_left
+;    ld   a, DIR_LEFT
+;    ld   [wEnemySaw1.dir], a
+;    jr   .end
+;
+;.bounce_right
+;    ld   a, DIR_RIGHT
+;    ld   [wEnemySaw1.dir], a
+;    jr   .end
+;
+;.end
+;    ret
 
 ; --
 ; -- Update Enemy Saw 2
@@ -1583,25 +1654,27 @@ wPlayerWin: db
 ; -- Enemies
 ; --
 
+wActiveEnemy: dw
+
 ; Enemy Saw 1
 ; Middle section of the level
 ; 
 wEnemySaw1:
-.x:         db ; X pos
-.x_sub:     db
-.y:         db ; Y pos
+.x:         db ; X position
+.y:         db ; Y position
+.x_sub:     db ; Sub-pixel positions
 .y_sub:     db
-.dir:       db ; Direction the saw is moving in
+.dir:       db ; Direction moving
 
 ; Enemy Saw 2
 ; Middle section of the level
 ; 
 wEnemySaw2:
-.x:         db ; X pos
+.x:         db
+.y:         db
 .x_sub:     db
-.y:         db ; Y pos
 .y_sub:     db
-.dir:       db ; Direction the saw is moving in
+.dir:       db
 
 wEnemySawAnimCounter: db
 
