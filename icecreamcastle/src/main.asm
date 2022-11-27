@@ -327,8 +327,7 @@ GameLoop:
     ld   hl, wEnemySaw1
     call UpdateEnemySaw
     ld   hl, wEnemySaw2
-    ;call UpdateEnemySaw
-    call UpdateEnemySaw2
+    call UpdateEnemySaw
 
 .end
     jp   GameLoop
@@ -446,6 +445,10 @@ ResetLevel:
     xor  a
     ld   [wEnemySaw1.x_sub], a
     ld   [wEnemySaw1.y_sub], a
+    ld   a, 8 * 8
+    ld   [wEnemySaw1.lbound], a
+    ld   a, 8 * 15
+    ld   [wEnemySaw1.rbound], a
 
     ; Reset the enemy saw 2 values
     ld   a, SPRITE_SAW
@@ -459,6 +462,10 @@ ResetLevel:
     xor  a
     ld   [wEnemySaw2.x_sub], a
     ld   [wEnemySaw2.y_sub], a
+    ld   a, 8 * 7
+    ld   [wEnemySaw2.lbound], a
+    ld   a, 8 * 13
+    ld   [wEnemySaw2.rbound], a
 
     ; Init the lasers
     ld   a, LASER_SPEED
@@ -1152,10 +1159,13 @@ PlayerKilled:
     ret
 
 ; --
-; -- Update Enemy Saw 1
+; -- Update Enemy Saw
+; --
+; -- Move the saw, bounce at the bounding column if needed
+; --
+; -- @param hl Pointer to the active enemy saw
 ; --
 UpdateEnemySaw:
-UpdateEnemySaw1:
 
     ; For reference...
     ;wEnemySaw1:
@@ -1164,6 +1174,8 @@ UpdateEnemySaw1:
     ;.x_sub:     db ; Sub-pixel positions
     ;.y_sub:     db
     ;.dir:       db ; Direction moving
+    ;.lbound:    db ; Left bound col
+    ;.rbound:    db ; Right bounding col
 
     inc  hl
     inc  hl
@@ -1199,11 +1211,33 @@ UpdateEnemySaw1:
     dec  [hl]
 
 .check_bounce
-    ld   a, 8 * 15
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl ; rbound
+    ld   a, [hl]
+    dec  hl
+    dec  hl
+    dec  hl
+    dec  hl
+    dec  hl
+    dec  hl ; x
     cp   a, [hl]
     jr   z, .bounce_left
 
-    ld   a, 8 * 8
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl ; lbound
+    ld   a, [hl]
+    dec  hl
+    dec  hl
+    dec  hl
+    dec  hl
+    dec  hl ; x
     cp   a, [hl]
     jr   z, .bounce_right
     ret
@@ -1272,58 +1306,6 @@ UpdateEnemySaw1:
 ;
 ;.end
 ;    ret
-
-; --
-; -- Update Enemy Saw 2
-; --
-UpdateEnemySaw2:
-
-    ld   a, [wEnemySaw2.dir]
-    cp   a, DIR_RIGHT
-    jr   nz, .left
-.right
-    ld   a, [wEnemySaw2.x_sub]
-    add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw2.x_sub], a
-    jr   nc, .check_bounce
-    ld   hl, wEnemySaw2.x
-    inc  [hl]
-    jr   .check_bounce
-
-.left
-    ld   a, [wEnemySaw2.x_sub]
-    add  a, ENEMY_SAW_SPEED_SUBPIXELS
-    ld   [wEnemySaw2.x_sub], a
-    jr   nc, .check_bounce
-    ld   hl, wEnemySaw2.x
-    dec  [hl]
-
-.check_bounce
-    ; if X == 8 * 15 then go LEFT
-    ; if X == 8 * 8 then go RIGHT
-    ld   hl, wEnemySaw2.x
-    ld   a, 8 * 13
-    cp   a, [hl]
-    jr   z, .bounce_left
-
-    ld   a, 8 * 7
-    cp   a, [hl]
-    jr   z, .bounce_right
-
-    jr   .end
-
-.bounce_left
-    ld   a, DIR_LEFT
-    ld   [wEnemySaw2.dir], a
-    jr   .end
-
-.bounce_right
-    ld   a, DIR_RIGHT
-    ld   [wEnemySaw2.dir], a
-    jr   .end
-
-.end
-    ret
 
 ; --
 ; -- Check Collision With Enemy Saw 1
@@ -1666,6 +1648,8 @@ wEnemySaw1:
 .x_sub:     db ; Sub-pixel positions
 .y_sub:     db
 .dir:       db ; Direction moving
+.lbound:    db ; Left bound col
+.rbound:    db ; Right bounding col
 
 ; Enemy Saw 2
 ; Middle section of the level
@@ -1676,6 +1660,8 @@ wEnemySaw2:
 .x_sub:     db
 .y_sub:     db
 .dir:       db
+.lbound:    db
+.rbound:    db
 
 wEnemySawAnimCounter: db
 
