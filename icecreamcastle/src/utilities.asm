@@ -3,13 +3,38 @@
 ; --
 
 ; --
+; -- MACRO: Load Word
+; --
+; -- 16 bit copy
+; --
+; -- @param \1 bc, de, hl
+; -- @param \2 Any 16 bit address
+; --
+MACRO ldw
+    ld HIGH(\1), HIGH(\2)
+    ld LOW(\1), LOW(\2)
+ENDM
+
+; --
+; -- MACRO: Index
+; --
+; -- Sets hl to the pointer at r16 + index
+; --
+; -- @param \1 An index value into the enemy object
+; --
+MACRO idx
+    ld   hl, \2
+    add  hl, \1
+ENDM
+
+; --
 ; -- MACRO: Divide By 8
 ; --
 ; -- Divide the given register by 8.
 ; --
 ; -- @param \1 Register
 ; --
-MACRO divide_by_8
+MACRO div8
     srl  \1
     srl  \1
     srl  \1
@@ -87,4 +112,3 @@ CopyMem:
     jr   nz, CopyMem
 
     ret
-

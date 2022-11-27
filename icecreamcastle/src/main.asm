@@ -16,9 +16,9 @@ INCLUDE "utilities.asm"
 ; --
 
 ; Player starting position on screen
-PLAYER_START_COL   EQU 6
-PLAYER_START_ROW   EQU 17
-PLAYER_ANIM_SPEED  EQU 12 ; Frames until animation time, 12 is 5 FPS
+PLAYER_START_COL  EQU 6
+PLAYER_START_ROW  EQU 17
+PLAYER_ANIM_SPEED EQU 12 ; Frames until animation time, 12 is 5 FPS
 
 PLAYER_WIDTH   EQU 7
 PLAYER_HEIGHT  EQU 7
@@ -320,13 +320,11 @@ GameLoop:
 
     ; Check for collision with enemies
     call CheckEnemies
-    ; TODO: Put collision detection for Saw 2 with Saw 1
-    call CheckCollisionWithEnemySaw2
 
     ; Update enemies
-    ld   hl, wEnemySaw1
+    ldw  hl, wEnemy1
     call UpdateEnemySaw
-    ld   hl, wEnemySaw2
+    ldw  hl, wEnemy2
     call UpdateEnemySaw
 
 .end
@@ -346,15 +344,15 @@ UpdateOAM:
     ld   [PLAYER_OAM_FLAGS], a
 
     ; Update the enemy saw 1 object
-    ld   a, [wEnemySaw1.x]
+    ld   a, [wEnemy1 + IDX_ENEMY_X]
     ld   [ENEMYSAW1_OAM_X], a
-    ld   a, [wEnemySaw1.y]
+    ld   a, [wEnemy1 + IDX_ENEMY_Y]
     ld   [ENEMYSAW1_OAM_Y], a
 
     ; Update the enemy saw 2 object
-    ld   a, [wEnemySaw2.x]
+    ld   a, [wEnemy2 + IDX_ENEMY_X]
     ld   [ENEMYSAW2_OAM_X], a
-    ld   a, [wEnemySaw2.y]
+    ld   a, [wEnemy2 + IDX_ENEMY_Y]
     ld   [ENEMYSAW2_OAM_Y], a
 
     ret
@@ -387,7 +385,7 @@ AnimatePlayer:
 
 AnimateEnemies:
 
-    ld   hl, wEnemySawAnimCounter
+    ld   hl, wEnemyAnimCounter
     dec  [hl]
     jr   nz, .end
 
@@ -407,7 +405,7 @@ AnimateEnemies:
 
     ; Reset the counter
     ld   a, ENEMY_SAW_ANIM_SPEED
-    ld   [wEnemySawAnimCounter], a
+    ld   [wEnemyAnimCounter], a
 
 .end
 
@@ -437,47 +435,48 @@ ResetLevel:
     ld   a, SPRITE_SAW
     ld   [ENEMYSAW1_OAM_TILEID], a
     ld   a, 8 * 13
-    ld   [wEnemySaw1.x], a
+    ld   [wEnemy1 + IDX_ENEMY_X], a
     ld   a, 8 * 9
-    ld   [wEnemySaw1.y], a
+    ld   [wEnemy1 + IDX_ENEMY_Y], a
     ld   a, DIR_RIGHT
-    ld   [wEnemySaw1.dir], a
+    ld   [wEnemy1 + IDX_ENEMY_DIR], a
     xor  a
-    ld   [wEnemySaw1.x_sub], a
-    ld   [wEnemySaw1.y_sub], a
+    ld   [wEnemy1 + IDX_ENEMY_X_SUB], a
+    ld   [wEnemy1 + IDX_ENEMY_Y_SUB], a
     ld   a, 8 * 8
-    ld   [wEnemySaw1.lbound], a
+    ld   [wEnemy1 + IDX_ENEMY_LBOUND], a
     ld   a, 8 * 15
-    ld   [wEnemySaw1.rbound], a
+    ld   [wEnemy1 + IDX_ENEMY_RBOUND], a
 
     ; Reset the enemy saw 2 values
     ld   a, SPRITE_SAW
     ld   [ENEMYSAW2_OAM_TILEID], a
     ld   a, 8 * 11
-    ld   [wEnemySaw2.x], a
+    ld   [wEnemy2 + IDX_ENEMY_X], a
     ld   a, 8 * 4
-    ld   [wEnemySaw2.y], a
+    ld   [wEnemy2 + IDX_ENEMY_Y], a
     ld   a, DIR_RIGHT
-    ld   [wEnemySaw2.dir], a
+    ld   [wEnemy2 + IDX_ENEMY_DIR], a
     xor  a
-    ld   [wEnemySaw2.x_sub], a
-    ld   [wEnemySaw2.y_sub], a
+    ld   [wEnemy2 + IDX_ENEMY_X_SUB], a
+    ld   [wEnemy2 + IDX_ENEMY_Y_SUB], a
     ld   a, 8 * 7
-    ld   [wEnemySaw2.lbound], a
+    ld   [wEnemy2 + IDX_ENEMY_LBOUND], a
     ld   a, 8 * 13
-    ld   [wEnemySaw2.rbound], a
+    ld   [wEnemy2 + IDX_ENEMY_RBOUND], a
 
     ; Init the lasers
+    ld   a, 1
+    ld   [wLasersEnabled], a
     ld   a, LASER_SPEED
-    ld   [wLasersFlashCount], a
-    call EnableLasers
+    ld   [wLasersCountdown], a
 
     ; Init animation
     ld   a, PLAYER_ANIM_SPEED
     ld   [wPlayerAnimCounter], a
 
     ld   a, ENEMY_SAW_ANIM_SPEED
-    ld   [wEnemySawAnimCounter], a
+    ld   [wEnemyAnimCounter], a
 
     ; Revive the player
     xor  a
@@ -886,10 +885,10 @@ CheckTerrainAtPoint:
     ld   c, a
 
     ; Divide X position by 8
-    divide_by_8 b
+    div8 b
 
     ; Divide Y position by 8
-    divide_by_8 c
+    div8 c
 
     ; Load the current level map into hl
     ld hl, Level01Tilemap
@@ -947,6 +946,13 @@ CheckTerrainAtPoint:
 
     ret
 
+; --
+; -- Check Target
+; --
+; -- Check for player touching the target (ice cream)
+; --
+; -- @return z Set if collision
+; --
 CheckTarget:
 
     push bc
@@ -995,8 +1001,8 @@ CheckTarget:
 CheckTargetAtPoint:
     push bc
 
-    divide_by_8 b
-    divide_by_8 c
+    div8 b
+    div8 c
 
     ; Check the X position
     ld   a, TARGET_COL
@@ -1082,8 +1088,8 @@ CheckTrapsAtPoint:
     ld   a, c
     sub  OAM_Y_OFS
     ld   c, a
-    divide_by_8 b
-    divide_by_8 c
+    div8 b
+    div8 c
     ; Load the current level map into hl
     ld   hl, Level01Tilemap
     ; Calculate "pos = (y * 32) + x"
@@ -1141,6 +1147,11 @@ CheckTrapsAtPoint:
 
     ret
 
+; --
+; -- Player Won
+; --
+; -- Mark that the player has won the level
+; --
 PlayerWon:
     ld   a, 1
     ; TODO
@@ -1167,95 +1178,57 @@ PlayerKilled:
 ; --
 UpdateEnemySaw:
 
-    ; For reference...
-    ;wEnemySaw1:
-    ;.x:         db ; X position
-    ;.y:         db ; Y position
-    ;.x_sub:     db ; Sub-pixel positions
-    ;.y_sub:     db
-    ;.dir:       db ; Direction moving
-    ;.lbound:    db ; Left bound col
-    ;.rbound:    db ; Right bounding col
+    ldw  bc, hl
 
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl ; dir
+    ; Which direction is the enemy moving?
+    idx  bc, IDX_ENEMY_DIR
     ld   a, [hl]
     cp   a, DIR_RIGHT
     jr   nz, .left
 
 ; right
-    dec  hl
-    dec  hl ; x_sub
+    idx  bc, IDX_ENEMY_X_SUB
     ld   a, [hl]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
     ld   [hl], a
-    dec  hl
-    dec  hl ; x
     jr   nc, .check_bounce
 
+    idx  bc, IDX_ENEMY_X
     inc  [hl]
     jr   .check_bounce
 
 .left
-    dec  hl
-    dec  hl ; x_sub
+    idx  bc, IDX_ENEMY_X_SUB
     ld   a, [hl]
     add  a, ENEMY_SAW_SPEED_SUBPIXELS
     ld   [hl], a
-    dec  hl
-    dec  hl ; x
     jr   nc, .check_bounce
 
+    idx  bc, IDX_ENEMY_X
     dec  [hl]
 
 .check_bounce
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl ; rbound
+    idx  bc, IDX_ENEMY_RBOUND
     ld   a, [hl]
-    dec  hl
-    dec  hl
-    dec  hl
-    dec  hl
-    dec  hl
-    dec  hl ; x
+    idx  bc, IDX_ENEMY_X
     cp   a, [hl]
     jr   z, .bounce_left
 
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl ; lbound
+    idx  bc, IDX_ENEMY_LBOUND
     ld   a, [hl]
-    dec  hl
-    dec  hl
-    dec  hl
-    dec  hl
-    dec  hl ; x
+    idx  bc, IDX_ENEMY_X
     cp   a, [hl]
     jr   z, .bounce_right
     ret
 
 .bounce_left
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl ; dir
+    idx  bc, IDX_ENEMY_DIR
     ld   a, DIR_LEFT
     ld   [hl], a
     jr   .end
 
 .bounce_right
-    inc  hl
-    inc  hl
-    inc  hl
-    inc  hl ; dir
+    idx  bc, IDX_ENEMY_DIR
     ld   a, DIR_RIGHT
     ld   [hl], a
     jr   .end
@@ -1263,56 +1236,19 @@ UpdateEnemySaw:
 .end
     ret
 
-;    ld   a, [wEnemySaw1.dir]
-;    cp   a, DIR_RIGHT
-;    jr   nz, .left
-;; right
-;    ld   a, [wEnemySaw1.x_sub]
-;    add  a, ENEMY_SAW_SPEED_SUBPIXELS
-;    ld   [wEnemySaw1.x_sub], a
-;    jr   nc, .check_bounce
-;    ld   hl, wEnemySaw1.x
-;    inc  [hl]
-;    jr   .check_bounce
-;
-;.left
-;    ld   a, [wEnemySaw1.x_sub]
-;    add  a, ENEMY_SAW_SPEED_SUBPIXELS
-;    ld   [wEnemySaw1.x_sub], a
-;    jr   nc, .check_bounce
-;    ld   hl, wEnemySaw1.x
-;    dec  [hl]
-;
-;.check_bounce
-;    ld   hl, wEnemySaw1.x
-;    ld   a, 8 * 15
-;    cp   a, [hl]
-;    jr   z, .bounce_left
-;
-;    ld   a, 8 * 8
-;    cp   a, [hl]
-;    jr   z, .bounce_right
-;    ret
-;
-;.bounce_left
-;    ld   a, DIR_LEFT
-;    ld   [wEnemySaw1.dir], a
-;    jr   .end
-;
-;.bounce_right
-;    ld   a, DIR_RIGHT
-;    ld   [wEnemySaw1.dir], a
-;    jr   .end
-;
-;.end
-;    ret
-
 ; --
-; -- Check Collision With Enemy Saw 1
+; -- Check Enemies
+; --
+; -- Check Collision With Enemies
 ; --
 CheckEnemies:
 
-    push bc
+    ld   d, NUM_ENEMIES
+
+    ; Start with the first enemy
+    ldw  hl, wEnemy1
+
+.loop
 
     ; Upper-left pixel
     ld   a, [wPlayerX]
@@ -1320,21 +1256,21 @@ CheckEnemies:
     ld   a, [wPlayerY]
     ld   c, a
     call CheckEnemiesAtPoint
-    jr z, .end
+    ;ret  z
 
     ; Upper-right pixel
     ld   a, b
     add  PLAYER_WIDTH + 1
     ld   b, a
     call CheckEnemiesAtPoint
-    jr   z, .end
+    ;ret  z
 
     ; Lower-right pixel
     ld   a, c
     add  PLAYER_HEIGHT + 1
     ld   c, a
     call CheckEnemiesAtPoint
-    jr   z, .end
+    ;ret  z
 
     ; Lower-left pixel
     ld   a, b
@@ -1342,8 +1278,14 @@ CheckEnemies:
     ld   b, a
     call CheckEnemiesAtPoint
 
-.end
-    pop  bc
+    ; Move hl to the next enemy
+    ld   b, 0
+    ld   c, ENEMY_SIZE_BYTES
+    add  hl, bc
+
+    dec  d
+    jr   nz, .loop
+
     ret
 
 ; --
@@ -1353,34 +1295,43 @@ CheckEnemies:
 ; --
 ; -- @param b X position to check
 ; -- @param c Y position to check
+; -- @param hl Pointer to the enemy
 ; --
 CheckEnemiesAtPoint:
 
-    ; if X (b) > wEnemySaw1.x
-    ; if wEnemySaw1.x (a) < X (b)
+    ; hl will be modified so save a copy to pop later
+    push hl
+
+    ; hl points to the first memory of the current enemy
+    inc  hl ; hl now points to X
+
+    ; if X (b) > wEnemy1.x
+    ; if wEnemy1.x (a) < X (b)
     ;   no -> jr .end
-    ld   a, [wEnemySaw1.x]
+    ld   a, [hl]
     cp   a, b
     jr   nc, .end
 
-    ; if X (b) < wEnemySaw1.x + 8
-    ; if wEnemySaw1.x + 8 (a) > X (b)
+    ; if X (b) < wEnemy1.x + 8
+    ; if wEnemy1.x + 8 (a) > X (b)
     ;   no -> jr .end
-    ld   a, [wEnemySaw1.x]
+    ld   a, [hl]
     add  7
     cp   a, b
     jr   c, .end
 
-    ; if Y (c) > wEnemySaw1.y
-    ; if wEnemySaw1.y (a) < Y (c)
+    inc  hl ; hl now points to Y
+
+    ; if Y (c) > wEnemy1.y
+    ; if wEnemy1.y (a) < Y (c)
     ;   no -> jr .end
-    ld   a, [wEnemySaw1.y]
+    ld   a, [hl]
     cp   a, c
     jr   nc, .end
 
-    ; if Y (c) < wEnemySaw1.y + 8
+    ; if Y (c) < wEnemy1.y + 8
     ;   no -> jr .end
-    ld   a, [wEnemySaw1.y]
+    ld   a, [hl]
     add  7
     cp   a, c
     jr   c, .end
@@ -1389,149 +1340,48 @@ CheckEnemiesAtPoint:
     call PlayerKilled
 
 .end
-    ; No collision
+    pop  hl
+
     ret
 
 ; --
-; -- Check Collision With Enemy Saw 2
+; -- Update Lasers
 ; --
-CheckCollisionWithEnemySaw2:
-    push bc
-
-    ; Upper-left pixel
-    ld   a, [wPlayerX]
-    ld   b, a
-    ld   a, [wPlayerY]
-    ld   c, a
-    call CheckCollisionWithEnemySaw2AtPoint
-    jr z, .end
-
-    ; Upper-right pixel
-    ld   a, b
-    add  PLAYER_WIDTH + 1
-    ld   b, a
-    call CheckCollisionWithEnemySaw2AtPoint
-    jr   z, .end
-
-    ; Lower-right pixel
-    ld   a, c
-    add  PLAYER_HEIGHT + 1
-    ld   c, a
-    call CheckCollisionWithEnemySaw2AtPoint
-    jr   z, .end
-
-    ; Lower-left pixel
-    ld   a, b
-    sub  PLAYER_WIDTH
-    ld   b, a
-    call CheckCollisionWithEnemySaw2AtPoint
-
-.end
-    pop  bc
-    ret
-
+; -- Animate, enable / disable the lasers
 ; --
-; -- Check Collision With Enemy Saw 2 At Point (Pixel Position)
-; --
-; -- @param b X position to check
-; -- @param c Y position to check
-; --
-CheckCollisionWithEnemySaw2AtPoint:
-
-; Enemy Saw 2
-
-    ld   a, [wEnemySaw2.x]
-    cp   a, b
-    jr   nc, .end
-
-    ld   a, [wEnemySaw2.x]
-    add  7
-    cp   a, b
-    jr   c, .end
-
-    ld   a, [wEnemySaw2.y]
-    cp   a, c
-    jr   nc, .end
-
-    ld   a, [wEnemySaw2.y]
-    add  7
-    cp   a, c
-    jr   c, .end
-
-    call PlayerKilled
-    ret
-
-.end
-    ret
-
 UpdateLasers:
-    ld   hl, wLasersFlashCount
+
+    ld   hl, wLasersCountdown
     dec  [hl]
-    jr   nz, .end
+    ret  nz
 
     ; Reset the laser countdown
     ld   [hl], LASER_SPEED
 
     ; Toggle the lasers
     ld   a, [wLasersEnabled]
-    cp   0
-    jr   z, .enable_lasers
+    xor  1
+    ld   [wLasersEnabled], a
+    jr   z, .disable_lasers
 
+; Enable lasers
+    ld   bc, $5A3C
+    jr   .update_vram
+
+.disable_lasers
     ; Disable lasers
-    ld   a, TILE_BLANK ; The blank black background tile
-    call SetLasers
-    ld   hl, wLasersEnabled
-    ld   [hl], 0
-    jr .end
+    ld   bc, $0000
 
-.enable_lasers
-    ; Enable lasers
-    ld   a, TILE_LASER ; Laser tile
-    call SetLasers
-    ld   hl, wLasersEnabled
-    ld   [hl], 1
+.update_vram
+    ld   hl, VRAM_BACKGROUND_TILES + (16 * TILE_LASER)
 
-.end
-    ret
-
-EnableLasers:
-    ld   a, TILE_LASER
-    call SetLasers
-
-    ld   hl, wLasersEnabled
-    ld   [hl], 1
-    ret
-
-SetLasers:
-    ; Top row laser
-    ld   hl, _SCRN0 + ((2 * SCRN_VX_B) + 9)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((3 * SCRN_VX_B) + 9)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((4 * SCRN_VX_B) + 9)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((5 * SCRN_VX_B) + 9)
-    ld   [hl], a
-
-    ; Bottom row left laser
-    ld   hl, _SCRN0 + ((12 * SCRN_VX_B) + 8)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((13 * SCRN_VX_B) + 8)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((14 * SCRN_VX_B) + 8)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((15 * SCRN_VX_B) + 8)
-    ld   [hl], a
-
-    ; Bottom row right laser
-    ld   hl, _SCRN0 + ((12 * SCRN_VX_B) + 12)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((13 * SCRN_VX_B) + 12)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((14 * SCRN_VX_B) + 12)
-    ld   [hl], a
-    ld   hl, _SCRN0 + ((15 * SCRN_VX_B) + 12)
-    ld   [hl], a
+    ; Unrolled for speed
+REPT 8
+    ld   a, b
+    ld   [hl+], a
+    ld   a, c
+    ld   [hl+], a
+ENDR
 
     ret
 
@@ -1637,39 +1487,33 @@ wPlayerWin: db
 ; -- Enemies
 ; --
 
-wActiveEnemy: dw
+; Total number of enemies on screen (2 saws)
+NUM_ENEMIES EQU 2
 
-; Enemy Saw 1
-; Middle section of the level
+; Enemy object memory index numbers
+IDX_ENEMY_ACTIVE EQU 0
+IDX_ENEMY_X      EQU 1
+IDX_ENEMY_Y      EQU 2
+IDX_ENEMY_X_SUB  EQU 3
+IDX_ENEMY_Y_SUB  EQU 4
+IDX_ENEMY_DIR    EQU 5
+IDX_ENEMY_LBOUND EQU 6
+IDX_ENEMY_RBOUND EQU 7
+ENEMY_SIZE_BYTES EQU 8
+
+; Enemies
+; ...used for the saws, in the middle and upper sections of the level
 ; 
-wEnemySaw1:
-.x:         db ; X position
-.y:         db ; Y position
-.x_sub:     db ; Sub-pixel positions
-.y_sub:     db
-.dir:       db ; Direction moving
-.lbound:    db ; Left bound col
-.rbound:    db ; Right bounding col
+wEnemy1: ds ENEMY_SIZE_BYTES
+wEnemy2: ds ENEMY_SIZE_BYTES
 
-; Enemy Saw 2
-; Middle section of the level
-; 
-wEnemySaw2:
-.x:         db
-.y:         db
-.x_sub:     db
-.y_sub:     db
-.dir:       db
-.lbound:    db
-.rbound:    db
-
-wEnemySawAnimCounter: db
+wEnemyAnimCounter: db
 
 ; Lasers
 ; Countdown to 0, then toggle the lasers
 ;
-wLasersFlashCount: db
-wLasersEnabled:    db
+wLasersCountdown: db
+wLasersEnabled:   db
 
 ; --
 ; -- Resources
@@ -1690,3 +1534,15 @@ INCBIN "tiles-sprites.2bpp"
 Level01Tilemap:
 INCBIN "tilemap-level-01.map"
 .end
+
+; Font tiles
+FontTiles:
+INCBIN "font.chr"
+.end
+
+; --
+; -- Text
+; --
+SECTION "Text", ROM0
+
+HelloStr: db "hello", 0
