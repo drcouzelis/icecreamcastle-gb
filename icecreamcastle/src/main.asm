@@ -28,6 +28,12 @@ TARGET_ROW     EQU 7
 TARGET_START_X EQU 8 * TARGET_COL
 TARGET_START_Y EQU 8 * TARGET_ROW
 
+DIGIT_L_X EQU 8 * 4
+DIGIT_C_X EQU (8 * 4) + 4
+DIGIT_R_X EQU 8 * 5
+ROUND_Y   EQU 8 * 2
+TRIES_Y   EQU 8 * 3
+
 ; Number of pixels moved every frame when walking
 PLAYER_WALK_SPEED_SUBPIXELS EQU %11000000 ; 0.75 in binary fraction
 
@@ -66,12 +72,24 @@ SPRITE_PLAYER EQU 0
 SPRITE_TARGET EQU 2
 SPRITE_SAW    EQU 5
 
+; Numbers tiles
+SPRITE_0 EQU 8
+SPRITE_1 EQU 9
+SPRITE_2 EQU 10
+SPRITE_3 EQU 11
+SPRITE_4 EQU 12
+SPRITE_5 EQU 13
+SPRITE_6 EQU 14
+SPRITE_7 EQU 15
+SPRITE_8 EQU 16
+SPRITE_9 EQU 17
+
 ; Background tiles
 ; The values map to the tile index number in VRAM $9000
-TILE_BRICK  EQU 0 ; Bricks have collision detection
-TILE_BLANK  EQU 1 ; The black background
-TILE_LASER  EQU 3
-TILE_SPIKES EQU 6 ; Spikes have collision only from left, bottom, right sides
+TILE_BRICK  EQU 3 ; Bricks have collision detection
+TILE_BLANK  EQU 4 ; The black background
+TILE_LASER  EQU 9
+TILE_SPIKES EQU 12 ; Spikes have collision only from left, bottom, right sides
 
 ; Video RAM
 VRAM_OAM_TILES        EQU _VRAM         ; $8000, used for OAM sprites
@@ -79,7 +97,6 @@ VRAM_BACKGROUND_TILES EQU _VRAM + $1000 ; $9000, used for BG tiles
 
 ; Player sprite position in OAM
 PLAYER_OAM        EQU 0 * sizeof_OAM_ATTRS ; The first sprite in the list
-
 ; Player sprite position in OAM DMA memory
 PLAYER_OAM_TILEID EQU DMA_OAM + PLAYER_OAM + OAMA_TILEID
 PLAYER_OAM_X      EQU DMA_OAM + PLAYER_OAM + OAMA_X
@@ -88,7 +105,6 @@ PLAYER_OAM_FLAGS  EQU DMA_OAM + PLAYER_OAM + OAMA_FLAGS
 
 ; Target sprite position in OAM
 TARGET_OAM        EQU 1 * sizeof_OAM_ATTRS
-
 ; Target sprite position in OAM DMA memory
 TARGET_OAM_TILEID EQU DMA_OAM + TARGET_OAM + OAMA_TILEID
 TARGET_OAM_X      EQU DMA_OAM + TARGET_OAM + OAMA_X
@@ -110,6 +126,48 @@ ENEMYSAW2_OAM_TILEID EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_TILEID
 ENEMYSAW2_OAM_X      EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_X
 ENEMYSAW2_OAM_Y      EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_Y
 ENEMYSAW2_OAM_FLAGS  EQU DMA_OAM + ENEMYSAW2_OAM + OAMA_FLAGS
+
+; Round digit left sprite position in OAM
+ROUND_L_OAM        EQU 4 * sizeof_OAM_ATTRS
+ROUND_L_OAM_TILEID EQU DMA_OAM + ROUND_L_OAM + OAMA_TILEID
+ROUND_L_OAM_X      EQU DMA_OAM + ROUND_L_OAM + OAMA_X
+ROUND_L_OAM_Y      EQU DMA_OAM + ROUND_L_OAM + OAMA_Y
+ROUND_L_OAM_FLAGS  EQU DMA_OAM + ROUND_L_OAM + OAMA_FLAGS
+
+; Round digit center sprite position in OAM
+ROUND_C_OAM        EQU 5 * sizeof_OAM_ATTRS
+ROUND_C_OAM_TILEID EQU DMA_OAM + ROUND_C_OAM + OAMA_TILEID
+ROUND_C_OAM_X      EQU DMA_OAM + ROUND_C_OAM + OAMA_X
+ROUND_C_OAM_Y      EQU DMA_OAM + ROUND_C_OAM + OAMA_Y
+ROUND_C_OAM_FLAGS  EQU DMA_OAM + ROUND_C_OAM + OAMA_FLAGS
+
+; Round digit right sprite position in OAM
+ROUND_R_OAM        EQU 6 * sizeof_OAM_ATTRS
+ROUND_R_OAM_TILEID EQU DMA_OAM + ROUND_R_OAM + OAMA_TILEID
+ROUND_R_OAM_X      EQU DMA_OAM + ROUND_R_OAM + OAMA_X
+ROUND_R_OAM_Y      EQU DMA_OAM + ROUND_R_OAM + OAMA_Y
+ROUND_R_OAM_FLAGS  EQU DMA_OAM + ROUND_R_OAM + OAMA_FLAGS
+
+; Tries digit left sprite position in OAM
+TRIES_L_OAM        EQU 7 * sizeof_OAM_ATTRS
+TRIES_L_OAM_TILEID EQU DMA_OAM + TRIES_L_OAM + OAMA_TILEID
+TRIES_L_OAM_X      EQU DMA_OAM + TRIES_L_OAM + OAMA_X
+TRIES_L_OAM_Y      EQU DMA_OAM + TRIES_L_OAM + OAMA_Y
+TRIES_L_OAM_FLAGS  EQU DMA_OAM + TRIES_L_OAM + OAMA_FLAGS
+
+; Tries digit center sprite position in OAM
+TRIES_C_OAM        EQU 8 * sizeof_OAM_ATTRS
+TRIES_C_OAM_TILEID EQU DMA_OAM + TRIES_C_OAM + OAMA_TILEID
+TRIES_C_OAM_X      EQU DMA_OAM + TRIES_C_OAM + OAMA_X
+TRIES_C_OAM_Y      EQU DMA_OAM + TRIES_C_OAM + OAMA_Y
+TRIES_C_OAM_FLAGS  EQU DMA_OAM + TRIES_C_OAM + OAMA_FLAGS
+
+; Tries digit right sprite position in OAM
+TRIES_R_OAM        EQU 9 * sizeof_OAM_ATTRS
+TRIES_R_OAM_TILEID EQU DMA_OAM + TRIES_R_OAM + OAMA_TILEID
+TRIES_R_OAM_X      EQU DMA_OAM + TRIES_R_OAM + OAMA_X
+TRIES_R_OAM_Y      EQU DMA_OAM + TRIES_R_OAM + OAMA_Y
+TRIES_R_OAM_FLAGS  EQU DMA_OAM + TRIES_R_OAM + OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -220,6 +278,75 @@ Start:
     ld   a, TARGET_START_Y
     ld   [TARGET_OAM_Y], a
 
+; Reset the score counters
+    ld   a, 1
+    ld   [wRound], a
+    ld   [wTries], a
+
+; Initialize the sprites to display the number of tries
+
+    ; Tries, left digit
+    ld   a, SPRITE_0
+    ld   [TRIES_L_OAM_TILEID], a
+    ld   a, DIGIT_L_X
+    ld   [TRIES_L_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_L_OAM_Y], a
+    ld   hl, TRIES_L_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
+    ; Tries, center digit
+    ld   a, SPRITE_0
+    ld   [TRIES_C_OAM_TILEID], a
+    ld   a, DIGIT_C_X
+    ld   [TRIES_C_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_C_OAM_Y], a
+    ld   hl, TRIES_C_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
+    ; Tries, right digit
+    ld   a, SPRITE_0
+    ld   [TRIES_R_OAM_TILEID], a
+    ld   a, DIGIT_R_X
+    ld   [TRIES_R_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_R_OAM_Y], a
+    ld   hl, TRIES_R_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
+; Initialize the sprites to display the round number
+
+    ; Round, left digit
+    ld   a, SPRITE_0
+    ld   [ROUND_L_OAM_TILEID], a
+    ld   a, DIGIT_L_X
+    ld   [ROUND_L_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_L_OAM_Y], a
+    ld   hl, ROUND_L_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
+    ; Round, center digit
+    ld   a, SPRITE_0
+    ld   [ROUND_C_OAM_TILEID], a
+    ld   a, DIGIT_C_X
+    ld   [ROUND_C_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_C_OAM_Y], a
+    ld   hl, ROUND_C_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
+    ; Round, right digit
+    ld   a, SPRITE_0
+    ld   [ROUND_R_OAM_TILEID], a
+    ld   a, DIGIT_R_X
+    ld   [ROUND_R_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_R_OAM_Y], a
+    ld   hl, ROUND_R_OAM_FLAGS
+    set  OAMB_PAL1, [hl]
+
 ; Reset all level parameters before starting the level
 
     call ResetLevel
@@ -234,6 +361,10 @@ Start:
 
     ; Object palette 0
     ld   [rOBP0], a
+
+    ; Object palette 1
+    ld   a, %00001101
+    ld   [rOBP1], a
 
     ; Turn the screen on, enable the OAM and BG layers
     ld   a, LCDCF_ON | LCDCF_OBJON | LCDCF_BGON
@@ -275,7 +406,7 @@ GameLoop:
     call hDMA
 
     ; Did the player die?
-    ld   a, [wPlayerDead]
+    ld   a, [wDead]
     cp   1
     jr   nz, .notdead
 
@@ -288,7 +419,7 @@ GameLoop:
 .notdead
 
     ; Did the player win?
-    ld   a, [wPlayerWin]
+    ld   a, [wWin]
     cp   1
     jr   nz, .notwon
 
@@ -360,7 +491,7 @@ UpdateOAM:
 AnimatePlayer:
 
     ; Is it time to animate?
-    ld   hl, wPlayerAnimCounter
+    ld   hl, wAnimCounter
     dec  [hl]
     jr   nz, .end
 
@@ -465,6 +596,10 @@ ResetLevel:
     ld   a, 8 * 13
     ld   [wEnemy2 + IDX_ENEMY_RBOUND], a
 
+    ; Set the score counters
+    call UpdateRound
+    call UpdateTries
+
     ; Init the lasers
     ld   a, 1
     ld   [wLasersEnabled], a
@@ -473,20 +608,218 @@ ResetLevel:
 
     ; Init animation
     ld   a, PLAYER_ANIM_SPEED
-    ld   [wPlayerAnimCounter], a
+    ld   [wAnimCounter], a
 
     ld   a, ENEMY_SAW_ANIM_SPEED
     ld   [wEnemyAnimCounter], a
 
     ; Revive the player
     xor  a
-    ld   [wPlayerDead], a
+    ld   [wDead], a
 
     ret
 
 VictoryScreen:
     ; TODO: Wait until a button is pressed
     ;jr   nz, VictoryScreen
+    ret
+
+LoseScreen:
+    ; TODO: Wait until a button is pressed
+    ;jr   nz, LoseScreen
+    ret
+
+; --
+; -- MACRO: Get Place Value
+; --
+; -- Find the decimal value in the 1, 10, or 100 place
+; --
+; -- hl has the pointer to the value
+; -- \1 is the place value (1, 10, 100)
+; -- a will have the result
+; -- b will be destroyed
+; --
+MACRO get_place_value
+    ld   a, [hl]
+    ld   b, 0
+IF \1 == 1
+.loop_hundreds\@
+    sub  100
+    jr   nc, .loop_hundreds\@
+    add  100
+.loop_tens\@
+    sub  10
+    jr   nc, .loop_tens\@
+    add  10
+ELIF \1 == 10
+.loop_hundreds\@
+    sub  100
+    jr   nc, .loop_hundreds\@
+    add  100
+.loop\@
+    sub  \1
+    jr   c, .end\@
+    inc  b
+    jr   .loop\@
+.end\@
+    ld   a, b
+ELIF \1 == 100
+.loop\@
+    sub  \1
+    jr   c, .end\@
+    inc  b
+    jr   .loop\@
+.end\@
+    ld   a, b
+ENDC
+ENDM
+
+UpdateRound:
+
+    ld   hl, wRound
+
+; Single digit, 1 to 9
+    ld   a, 9
+    cp   [hl]
+    jr   c, .double
+
+    ; Left digit
+    get_place_value 1
+    add  SPRITE_0
+    ld   [ROUND_L_OAM_TILEID], a
+
+    ; Disable other digits
+    xor  a
+    ld   [ROUND_C_OAM_X], a
+    ld   [ROUND_C_OAM_Y], a
+    ld   [ROUND_R_OAM_X], a
+    ld   [ROUND_R_OAM_Y], a
+    
+    ret
+
+; Double digits, 10 to 99
+.double
+    ld   a, 99
+    cp   [hl]
+    jr   c, .triple
+
+    ; Center digit
+    ld   a, DIGIT_C_X
+    ld   [ROUND_C_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_C_OAM_Y], a
+
+    ; Disable right digit
+    xor  a
+    ld   [ROUND_R_OAM_X], a
+    ld   [ROUND_R_OAM_Y], a
+    
+    get_place_value 10
+    add  SPRITE_0
+    ld   [ROUND_L_OAM_TILEID], a
+    get_place_value 1
+    add  SPRITE_0
+    ld   [ROUND_C_OAM_TILEID], a
+
+; Triple digits, 100 to 255
+.triple
+
+    ; Center digit
+    ld   a, DIGIT_C_X
+    ld   [ROUND_C_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_C_OAM_Y], a
+
+    ; Right digit
+    ld   a, DIGIT_R_X
+    ld   [ROUND_R_OAM_X], a
+    ld   a, ROUND_Y
+    ld   [ROUND_R_OAM_Y], a
+    
+    get_place_value 100
+    add  SPRITE_0
+    ld   [ROUND_L_OAM_TILEID], a
+    get_place_value 10
+    add  SPRITE_0
+    ld   [ROUND_C_OAM_TILEID], a
+    get_place_value 1
+    add  SPRITE_0
+    ld   [ROUND_R_OAM_TILEID], a
+
+    ret
+
+UpdateTries:
+
+    ld   hl, wTries
+
+; Single digit, 1 to 9
+    ld   a, 9
+    cp   [hl]
+    jr   c, .double
+
+    get_place_value 1
+    add  SPRITE_0
+    ld   [TRIES_L_OAM_TILEID], a
+
+    xor  a
+    ld   [TRIES_C_OAM_X], a
+    ld   [TRIES_C_OAM_Y], a
+    ld   [TRIES_R_OAM_X], a
+    ld   [TRIES_R_OAM_Y], a
+    
+    ret
+
+; Double digits, 10 to 99
+.double
+    ld   a, 99
+    cp   [hl]
+    jr   c, .triple
+
+    ; Center digit
+    ld   a, DIGIT_C_X
+    ld   [TRIES_C_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_C_OAM_Y], a
+
+    ; Disable right digit
+    xor  a
+    ld   [TRIES_R_OAM_X], a
+    ld   [TRIES_R_OAM_Y], a
+    
+    get_place_value 10
+    add  SPRITE_0
+    ld   [TRIES_L_OAM_TILEID], a
+    get_place_value 1
+    add  SPRITE_0
+    ld   [TRIES_C_OAM_TILEID], a
+
+    ret
+
+; Triple digits, 100 to 255
+.triple
+
+    ; Center digit
+    ld   a, DIGIT_C_X
+    ld   [TRIES_C_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_C_OAM_Y], a
+
+    ; Right digit
+    ld   a, DIGIT_R_X
+    ld   [TRIES_R_OAM_X], a
+    ld   a, TRIES_Y
+    ld   [TRIES_R_OAM_Y], a
+    
+    get_place_value 100
+    add  SPRITE_0
+    ld   [TRIES_L_OAM_TILEID], a
+    get_place_value 10
+    add  SPRITE_0
+    ld   [TRIES_C_OAM_TILEID], a
+    get_place_value 1
+    add  SPRITE_0
+    ld   [TRIES_R_OAM_TILEID], a
+
     ret
 
 ; --
@@ -1127,6 +1460,7 @@ CheckTrapsAtPoint:
 
     ; Player hit a laser!
     call PlayerKilled
+    jr   .end_spikes
 
 .end_lasers
 
@@ -1148,15 +1482,46 @@ CheckTrapsAtPoint:
     ret
 
 ; --
+; -- Inc With Cap
+; --
+; -- Increase the value in the spot in memory specified
+; -- by 1, capping at 255
+; --
+MACRO inc_with_cap
+
+    ld   hl, \1
+
+    ; Cap the number at 255
+    ld   a, 255
+    cp   [hl]
+    jr   z, .skip
+
+    ; Increase the score counter
+    inc  [hl]
+
+.skip
+
+ENDM
+
+; --
 ; -- Player Won
 ; --
 ; -- Mark that the player has won the level
 ; --
 PlayerWon:
+
+    ; Check if the player is already marked as won...
+    ld   a, [wWin]
+    cp   1
+    ret  z
+
+    inc_with_cap wRound
+
     ld   a, 1
     ; TODO
-    ;ld   [wPlayerWin], a
-    ld   [wPlayerDead], a
+    ;ld   [wWin], a
+    ld   [wDead], a
+
     ret
 
 ; --
@@ -1165,8 +1530,16 @@ PlayerWon:
 ; -- Mark that the player has been killed
 ; --
 PlayerKilled:
+
+    ; Check if the player is already marked as dead...
+    ld   a, [wDead]
+    cp   1
+    ret  z
+
+    inc_with_cap wTries
+
     ld   a, 1
-    ld   [wPlayerDead], a
+    ld   [wDead], a
     ret
 
 ; --
@@ -1446,11 +1819,27 @@ SECTION "Game State Variables", WRAM0
 ; If this is unset then update the game
 wVBlankFlag: db
 
-; If unset then it is time to animate the sprites
-wPlayerAnimCounter: db
-
 ; The currently pressed keys, updated every game loop
 wKeys: db
+
+; Number of rounds played
+; Increases by 1 every time the target is collected
+; Starts at 1
+wRound: db
+
+; Number of tries
+; Increases by 1 every time the player dies
+; Starts at 1
+wTries: db
+
+; If unset then it is time to animate the sprites
+wAnimCounter: db
+
+; Set to 1 if the player is dead
+wDead: db
+
+; Set to 1 if the player won
+wWin: db
 
 ; --
 ; -- Player
@@ -1476,12 +1865,6 @@ wPlayerJumping: db
 ; Can change mid-frame, for example, when jumping to the right
 ; Used when moving pixel by pixel
 wPlayerDir: db
-
-; Set to 1 if the player is dead
-wPlayerDead: db
-
-; Set to 1 if the player won
-wPlayerWin: db
 
 ; --
 ; -- Enemies
@@ -1528,21 +1911,10 @@ INCBIN "tiles-background.2bpp"
 ; Sprite tiles
 SpriteTiles:
 INCBIN "tiles-sprites.2bpp"
+INCBIN "tiles-numbers.2bpp"
 .end
 
 ; Map, level 01
 Level01Tilemap:
 INCBIN "tilemap-level-01.map"
 .end
-
-; Font tiles
-FontTiles:
-INCBIN "font.chr"
-.end
-
-; --
-; -- Text
-; --
-SECTION "Text", ROM0
-
-HelloStr: db "hello", 0
