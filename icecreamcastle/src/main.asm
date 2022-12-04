@@ -617,6 +617,11 @@ ResetLevel:
     xor  a
     ld   [wDead], a
 
+    ; Reset player input
+    ld   a, %11111111
+    ld   [wKeys], a
+    ld   [wPressed], a
+
     ret
 
 VictoryScreen:
@@ -921,7 +926,7 @@ UpdatePlayer:
     ;           Set DY to the initial jumping speed
 
     ; JUMP / A
-    ld   a, [wKeys]
+    ld   a, [wPressed]
     and  PADF_A
     jr   nz, .end_button_a
 
@@ -1765,24 +1770,29 @@ ENDR
 ; -- (Down, Up, Left, Right, Start, Select, B, A)
 ; -- Use "and PADF_<KEYNAME>", if Z is set then the key is pressed
 ; --
-; -- @return wKeys The eight inputs, 0 means pressed
+; -- @return wKeys The eight inputs, 0 means held
+; -- @return wPressed The eight inputs, 0 means pressed
 ; --
 ReadKeys:
-    push hl
 
     ; Results will be stored in hl
     ld   hl, wKeys
 
+    ; Keep a copy of the former status of the keys
+    ld   a, [hl]
+    cpl
+    ld   b, a
+
     ; Read D-pad (Down, Up, Left, Right)
     ld   a, P1F_GET_DPAD
-    ld   [rP1], a
+    ldh  [rP1], a
 
     ; Use REPT to read the values multiple times to ensure
     ; button presses are recorded
 
     ; Read the input from rP1, 0 means pressed
 REPT 2
-    ld   a, [rP1]
+    ldh  a, [rP1]
 ENDR
     or   %11110000
     swap a
@@ -1792,10 +1802,10 @@ ENDR
 
     ; Read buttons (Start, Select, B, A)
     ld   a, P1F_GET_BTN
-    ld   [rP1], a
+    ldh  [rP1], a
 
 REPT 6
-    ld   a, [rP1]
+    ldh  a, [rP1]
 ENDR
     or   %11110000
 
@@ -1805,9 +1815,18 @@ ENDR
 
     ; Clear the retrieval of button presses
     ld   a, P1F_GET_NONE
-    ld   [rP1], a
+    ldh  [rP1], a
 
-    pop  hl
+    ; Update the status of newly pressed keys
+    ; A key has just been pressed if you...
+    ; ...take the former state of the held keys...
+    ; ...take the complement of that value...
+    ; ...and "or" it with the current state of the keys!
+    ld   a, [hl]
+    ld   hl, wPressed
+    or   b
+    ld   [hl], a
+
     ret
 
 ; --
@@ -1819,8 +1838,9 @@ SECTION "Game State Variables", WRAM0
 ; If this is unset then update the game
 wVBlankFlag: db
 
-; The currently pressed keys, updated every game loop
+; The currently held or pressed keys, updated every game loop
 wKeys: db
+wPressed: db
 
 ; Number of rounds played
 ; Increases by 1 every time the target is collected
