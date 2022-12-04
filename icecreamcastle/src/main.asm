@@ -71,6 +71,7 @@ DIR_RIGHT EQU %00001000
 SPRITE_PLAYER EQU 0
 SPRITE_TARGET EQU 2
 SPRITE_SAW    EQU 5
+SPRITE_HEART  EQU 7
 
 ; Numbers tiles
 SPRITE_0 EQU 8
@@ -90,6 +91,16 @@ TILE_BRICK  EQU 3 ; Bricks have collision detection
 TILE_BLANK  EQU 4 ; The black background
 TILE_LASER  EQU 9
 TILE_SPIKES EQU 12 ; Spikes have collision only from left, bottom, right sides
+
+; Text tile and map info
+UPPER_TEXT_MAP_ADDRESS       EQU $9928
+LOWER_TEXT_MAP_ADDRESS       EQU $9946
+YOU_DIED_TEXT_TILE_ADDRESS   EQU $13
+YOU_DIED_NUM_TILES           EQU 5
+YOU_WIN_TEXT_TILE_ADDRESS    EQU $E
+YOU_WIN_NUM_TILES            EQU 5
+PLAY_AGAIN_TEXT_TILE_ADDRESS EQU $18
+PLAY_AGAIN_NUM_TILES         EQU 10
 
 ; Video RAM
 VRAM_OAM_TILES        EQU _VRAM         ; $8000, used for OAM sprites
@@ -168,6 +179,13 @@ TRIES_R_OAM_TILEID EQU DMA_OAM + TRIES_R_OAM + OAMA_TILEID
 TRIES_R_OAM_X      EQU DMA_OAM + TRIES_R_OAM + OAMA_X
 TRIES_R_OAM_Y      EQU DMA_OAM + TRIES_R_OAM + OAMA_Y
 TRIES_R_OAM_FLAGS  EQU DMA_OAM + TRIES_R_OAM + OAMA_FLAGS
+
+; Heart
+HEART_OAM        EQU 10 * sizeof_OAM_ATTRS
+HEART_OAM_TILEID EQU DMA_OAM + HEART_OAM + OAMA_TILEID
+HEART_OAM_X      EQU DMA_OAM + HEART_OAM + OAMA_X
+HEART_OAM_Y      EQU DMA_OAM + HEART_OAM + OAMA_Y
+HEART_OAM_FLAGS  EQU DMA_OAM + HEART_OAM + OAMA_FLAGS
 
 ; --
 ; -- VBlank Interrupt
@@ -248,6 +266,21 @@ Start:
     ld   bc, Level01Tiles.end - Level01Tiles
     call CopyMem
 
+    ; hl is still set from the call above...
+    ld   de, YouWinTiles
+    ld   bc, YouWinTiles.end - YouWinTiles
+    call CopyMem
+
+    ; hl is still set from the call above...
+    ld   de, YouDiedTiles
+    ld   bc, YouDiedTiles.end - YouDiedTiles
+    call CopyMem
+
+    ; hl is still set from the call above...
+    ld   de, PlayAgainTiles
+    ld   bc, PlayAgainTiles.end - PlayAgainTiles
+    call CopyMem
+
     ; Load the background tilemap into the background layer
     ; Starting at the top left corner of the background layer
     ; This maps tiles to a place in the background layer, to be drawn to the screen
@@ -273,12 +306,14 @@ Start:
 
     ld   a, SPRITE_TARGET
     ld   [TARGET_OAM_TILEID], a
-    ld   a, TARGET_START_X
-    ld   [TARGET_OAM_X], a
-    ld   a, TARGET_START_Y
-    ld   [TARGET_OAM_Y], a
+
+; Initialize the victory heart
+
+    ld   a, SPRITE_HEART
+    ld   [HEART_OAM_TILEID], a
 
 ; Reset the score counters
+
     ld   a, 1
     ld   [wRound], a
     ld   [wTries], a
@@ -411,11 +446,15 @@ GameLoop:
     jr   nz, .notdead
 
     ; The player DIED
+    call WaitForVBlank
+    call LoseScreen
+
     ; Reset the current level so they can try again
     di
     call WaitForVBlank
     call ResetLevel
     ei
+    jr   GameLoop
 .notdead
 
     ; Did the player win?
@@ -423,7 +462,16 @@ GameLoop:
     cp   1
     jr   nz, .notwon
 
+    ; The player WON!
+    call WaitForVBlank
     call VictoryScreen
+
+    ; Reset the current level so they can try again
+    di
+    call WaitForVBlank
+    call ResetLevel
+    ei
+    jr   GameLoop
 .notwon
 
     ; Update the status of the lasers (part of the background layer)
@@ -562,6 +610,17 @@ ResetLevel:
     ld   [wPlayerFacing], a
     ld   [wPlayerJumping], a
 
+    ; Reset the target values
+    ld   a, TARGET_START_X
+    ld   [TARGET_OAM_X], a
+    ld   a, TARGET_START_Y
+    ld   [TARGET_OAM_Y], a
+
+    ; Reset the heart values
+    xor  a
+    ld   [HEART_OAM_X], a
+    ld   [HEART_OAM_Y], a
+
     ; Reset the enemy saw 1 values
     ld   a, SPRITE_SAW
     ld   [ENEMYSAW1_OAM_TILEID], a
@@ -601,10 +660,11 @@ ResetLevel:
     call UpdateTries
 
     ; Init the lasers
-    ld   a, 1
+    ld   a, 0
     ld   [wLasersEnabled], a
-    ld   a, LASER_SPEED
+    ld   a, 1
     ld   [wLasersCountdown], a
+    call UpdateLasers
 
     ; Init animation
     ld   a, PLAYER_ANIM_SPEED
@@ -617,21 +677,187 @@ ResetLevel:
     xor  a
     ld   [wDead], a
 
+    ; Clear the win case
+    xor  a
+    ld   [wWin], a
+
     ; Reset player input
     ld   a, %11111111
     ld   [wKeys], a
     ld   [wPressed], a
+    call ReadKeys
+
+    ; Clear the upper text
+    ld   hl, UPPER_TEXT_MAP_ADDRESS
+    ld   a, TILE_BLANK
+REPT YOU_DIED_NUM_TILES
+    ldi  [hl], a
+ENDR
+
+    ; Clear the lower text
+    ld   hl, LOWER_TEXT_MAP_ADDRESS
+    ld   a, TILE_BLANK
+REPT PLAY_AGAIN_NUM_TILES
+    ldi  [hl], a
+ENDR
+
+    ; Sprites aren't updated until the values are copied to OAM
+    call UpdateOAM
 
     ret
 
+; --
+; -- Victory Screen
+; --
 VictoryScreen:
-    ; TODO: Wait until a button is pressed
-    ;jr   nz, VictoryScreen
+
+    di
+
+    ; Setup the lose screen
+
+    ; Display the text "YOU WIN!!"
+    ld   hl, UPPER_TEXT_MAP_ADDRESS
+    ld   a, YOU_WIN_TEXT_TILE_ADDRESS
+REPT YOU_WIN_NUM_TILES
+    ldi  [hl], a
+    inc  a
+ENDR
+
+    ; Display the text "JUMP TO PLAY AGAIN."
+    ld   hl, LOWER_TEXT_MAP_ADDRESS
+    ld   a, PLAY_AGAIN_TEXT_TILE_ADDRESS
+REPT PLAY_AGAIN_NUM_TILES
+    ldi  [hl], a
+    inc  a
+ENDR
+
+    ; Set location of the player
+    ld   a, TARGET_START_X - 8
+    ld   [wPlayerX], a
+    ld   a, TARGET_START_Y
+    ld   [wPlayerY], a
+
+    ; Enable the heart
+    ld   a, TARGET_START_X - 4
+    ld   [HEART_OAM_X], a
+    ld   a, TARGET_START_Y - 9
+    ld   [HEART_OAM_Y], a
+
+    ; Disable sprites
+    xor  a
+    ld   [wEnemy1 + IDX_ENEMY_X], a
+    ld   [wEnemy1 + IDX_ENEMY_Y], a
+    ld   [wEnemy2 + IDX_ENEMY_X], a
+    ld   [wEnemy2 + IDX_ENEMY_Y], a
+
+    call UpdateOAM
+    call hDMA
+
+    ; Disable lasers
+    ld   a, 1
+    ld   [wLasersEnabled], a
+    ld   a, 1
+    ld   [wLasersCountdown], a
+    call UpdateLasers
+
+    ; Done setting up the screen
+
+    ei
+
+    ld   hl, wVBlankFlag
+    xor  a
+
+.wait
+    halt
+    nop
+
+    cp   a, [hl]
+    jr   z, .wait
+    ld   [wVBlankFlag], a
+
+    ; Animate the screen
+    call AnimatePlayer
+    call UpdateOAM
+    call hDMA
+
+    ; Check for button press to continue
+    call ReadKeys
+    ld   a, [wPressed]
+    and  PADF_A
+    jr   nz, .wait
+
     ret
 
+; --
+; -- Lose Screen
+; --
 LoseScreen:
-    ; TODO: Wait until a button is pressed
-    ;jr   nz, LoseScreen
+
+    di
+
+    ; Setup the lose screen
+
+    ; Display the text "YOU DIED."
+    ld   hl, UPPER_TEXT_MAP_ADDRESS
+    ld   a, YOU_DIED_TEXT_TILE_ADDRESS
+REPT YOU_DIED_NUM_TILES
+    ldi  [hl], a
+    inc  a
+ENDR
+
+    ; Display the text "JUMP TO PLAY AGAIN."
+    ld   hl, LOWER_TEXT_MAP_ADDRESS
+    ld   a, PLAY_AGAIN_TEXT_TILE_ADDRESS
+REPT PLAY_AGAIN_NUM_TILES
+    ldi  [hl], a
+    inc  a
+ENDR
+
+    ; Disable sprites
+    xor  a
+    ld   [wPlayerX], a
+    ld   [wPlayerY], a
+    ld   [TARGET_OAM_X], a
+    ld   [TARGET_OAM_Y], a
+    ld   [wEnemy1 + IDX_ENEMY_X], a
+    ld   [wEnemy1 + IDX_ENEMY_Y], a
+    ld   [wEnemy2 + IDX_ENEMY_X], a
+    ld   [wEnemy2 + IDX_ENEMY_Y], a
+
+    call UpdateOAM
+    call hDMA
+
+    ; Disable lasers
+    ld   a, 1
+    ld   [wLasersEnabled], a
+    ld   a, 1
+    ld   [wLasersCountdown], a
+    call UpdateLasers
+
+    ; Done setting up the screen
+
+    ei
+
+    ld   hl, wVBlankFlag
+    xor  a
+
+.wait
+    halt
+    nop
+
+    cp   a, [hl]
+    jr   z, .wait
+    ld   [wVBlankFlag], a
+
+    ; Animate the screen
+    ; TODO
+
+    ; Check for button press to continue
+    call ReadKeys
+    ld   a, [wPressed]
+    and  PADF_A
+    jr   nz, .wait
+
     ret
 
 ; --
@@ -1523,9 +1749,7 @@ PlayerWon:
     inc_with_cap wRound
 
     ld   a, 1
-    ; TODO
-    ;ld   [wWin], a
-    ld   [wDead], a
+    ld   [wWin], a
 
     ret
 
@@ -1926,6 +2150,18 @@ SECTION "Resources", ROM0
 ; Background tiles
 Level01Tiles:
 INCBIN "tiles-background.2bpp"
+.end
+
+YouWinTiles:
+INCBIN "tiles-youwin.2bpp"
+.end
+
+YouDiedTiles:
+INCBIN "tiles-youdied.2bpp"
+.end
+
+PlayAgainTiles:
+INCBIN "tiles-playagain.2bpp"
 .end
 
 ; Sprite tiles
