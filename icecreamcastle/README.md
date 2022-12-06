@@ -22,6 +22,6 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
   - [x] Collision detection with player
   - [x] Fix speed
   - [x] ...add the second saw
-- [ ] Add laser enemies
-- [ ] Tries counter
+- [x] Add laser enemies
+- [x] Tries counter
 - [ ] Sound effects
