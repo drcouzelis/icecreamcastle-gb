@@ -8,7 +8,6 @@
 INCLUDE "hardware.inc"
 
 INCLUDE "dma.asm"
-INCLUDE "player.asm"
 INCLUDE "utilities.asm" 
 
 ; --
