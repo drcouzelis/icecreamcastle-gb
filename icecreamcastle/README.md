@@ -25,5 +25,3 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
 - [x] Add laser enemies
 - [x] Tries counter
 - [x] Sound effects
-- [ ] Print to a cartridge
-  - [ ] ...with sticker
