@@ -1,17 +1,12 @@
 Notes
-* Do not disable the screen with every frame, it literally turn off the screen and leaves a "white" frame.
+* Do not disable the screen with every frame, it literally turns off the screen and leaves a "white" frame.
 * Use the V-Blank interrupt for timing the main game loop.
 * OAM must be cleared before use. It is filled with garbage at boot.
 * DMA is a process that allows fast transfer of graphics from ROM to OAM without needing to use the CPU. It isn't needed but it's useful.
-* It is custom to read the key input and arrange them in a byte, high-to-low, in this order: Down, Up, Left, Right, Start, Select, B, A.
-* It is custom to clear the reading of input, although it may not be needed. (load P1F_GET_NONE into [rP1])
+* It's customary to read the key input and arrange them in a byte, high-to-low, in this order: Down, Up, Left, Right, Start, Select, B, A.
 * Set a breakpoint with "ld b, b"
 * Make changes to OAM as soon as VBlank starts so you don't run out of time!
 * Consider doing updates in this order: VRAM -> Palettes -> DMA -> Input
-
-People
-* ISSOtm (THE guy)
-* rondnelson99 (a couple weeks ahead of me)
 
 Conventions
 * Labels use PascalCase
@@ -43,9 +38,8 @@ If you want a speed of 3 pixels over 4 frames, you want a speed of 3/4 (= 0.75) 
 To achieve this smoothly, you need to track positions at a precision greater than one pixel
 Since floating-point integers are way overkill for this, you can instead use fixed-point math
 Fixed-point is very easy: you take a number, and simply trim off some digits
-For example, in "3.4" decimal fixed-point, I you would write 0.75 as "0007500"
+For example, in "3.4" decimal fixed-point, you would write 0.75 as "0007500"
 3 digits, then an implied comma, then the fractional part
-How comfortable are you with scientific notation and math? It could simplify the explanation
 
 Fixed-point math is literally nothing more than plain integer math
 
@@ -60,13 +54,14 @@ Starting at position 0, over 4 frames, the position would be:
 - 1.5
 - 2.25
 - 3
+
 So the player would appear to
 - Not move
 - Move
 - Move
 - Move
+
 The upside is that this works even for more complicated fractions (try implementing a speed of 3/8 pixels/frame using timers), and also works seamlessly if the speed changes (typically, running)
-It's also typically at least as good as using timers, both in terms of code written and performance
 
 BCD Conversion
 https://www.exploringbinary.com/binary-converter/
