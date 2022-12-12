@@ -2063,13 +2063,13 @@ ENDR
 
 PlaySfxJump:
 
-    ld   a, $15
+    ld   a, $16
     ld   [rNR10], a
-    ld   a, $81
+    ld   a, $41
     ld   [rNR11], a
-    ld   a, $80
+    ld   a, $81
     ld   [rNR12], a
-    ld   a, $DC
+    ld   a, $14
     ld   [rNR13], a
     ld   a, $C5
     ld   [rNR14], a
