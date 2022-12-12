@@ -24,4 +24,6 @@ Some macros and other ideas are from the work of [mdsteele](https://github.com/m
   - [x] ...add the second saw
 - [x] Add laser enemies
 - [x] Tries counter
-- [ ] Sound effects
+- [x] Sound effects
+- [ ] Print to a cartridge
+  - [ ] ...with sticker

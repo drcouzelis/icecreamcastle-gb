@@ -249,7 +249,7 @@ Start:
 
     ; Turn off sound (for now)
     ; TODO: Add sound!
-    ld   [rNR52], a
+    ;ld   [rNR52], a
 
     ; OAM is all messy at initialization, clean it up
     call ResetOAM
@@ -1173,6 +1173,10 @@ UpdatePlayer:
     ; Clear any leftover subpixel movement, for consistent jumping
     xor  a
     ld   [wPlayerYSub], a
+
+    ; Add the jump sound effect
+    call PlaySfxJump
+
 .end_button_a
     
 ; APPLY GRAVITY
@@ -1751,6 +1755,8 @@ PlayerWon:
     ld   a, 1
     ld   [wWin], a
 
+    call PlaySfxWin
+
     ret
 
 ; --
@@ -1769,6 +1775,9 @@ PlayerKilled:
 
     ld   a, 1
     ld   [wDead], a
+
+    call PlaySfxDead
+
     ret
 
 ; --
@@ -2050,6 +2059,51 @@ ENDR
     ld   hl, wPressed
     or   b
     ld   [hl], a
+
+    ret
+
+PlaySfxJump:
+
+    ld   a, $15
+    ld   [rNR10], a
+    ld   a, $81
+    ld   [rNR11], a
+    ld   a, $80
+    ld   [rNR12], a
+    ld   a, $DC
+    ld   [rNR13], a
+    ld   a, $C5
+    ld   [rNR14], a
+
+    ret
+
+PlaySfxDead:
+
+    ld   a, $6C
+    ld   [rNR10], a
+    ld   a, $41
+    ld   [rNR11], a
+    ld   a, $F0
+    ld   [rNR12], a
+    ld   a, $A4
+    ld   [rNR13], a
+    ld   a, $C6
+    ld   [rNR14], a
+
+    ret
+
+PlaySfxWin:
+
+    ld   a, $75
+    ld   [rNR10], a
+    ld   a, $81
+    ld   [rNR11], a
+    ld   a, $F0
+    ld   [rNR12], a
+    ld   a, $40
+    ld   [rNR13], a
+    ld   a, $C6
+    ld   [rNR14], a
 
     ret
 
