@@ -8,6 +8,8 @@ The "hardware.inc" reference file is from [the gbdev community](https://github.c
 
 Some macros and other ideas are from the work of [mdsteele](https://github.com/mdsteele/big2small).
 
+The sound effects were developed using the [GBSoundDemo](https://github.com/Zal0/GBSoundDemo/).
+
 ## TODO
 
 - [x] Collision detection
