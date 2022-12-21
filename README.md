@@ -1,11 +1,15 @@
 # icecreamcastle.gb
 
-A conversion of my game [Ice Cream Castle](https://github.com/drcouzelis/pico-8), originally for the PICO-8, to the Game Boy.
+A tiny run-and-jump game for the Game Boy. This is my first attempt at making a Game Boy game in Assembly language. The game is a conversion of my game [Ice Cream Castle](https://github.com/drcouzelis/pico-8), originally for the PICO-8.
+
+By tiny, I mean you can see everything the game has to offer in 15 seconds.
 
 - The source for this project started from the "Hello World" tutorial from ISSOtm's [GB ASM tutorial](https://eldred.fr/gb-asm-tutorial/hello-world.html)
 - The "hardware.inc" reference file is from [the gbdev community](https://github.com/gbdev/hardware.inc)
 - Some macros and other ideas are from the work of [mdsteele](https://github.com/mdsteele/big2small)
 - The sound effects were developed using the [GBSoundDemo](https://github.com/Zal0/GBSoundDemo/)
+
+The ROM is under 32k. The game will run on actual DMG hardware.
 
 ## TODO
 
