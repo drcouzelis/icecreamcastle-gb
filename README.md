@@ -1,4 +1,4 @@
-# icecreamcastle.gb
+# Ice Cream Castle
 
 A tiny run-and-jump game for the Game Boy. This is my first attempt at making a Game Boy game in Assembly language. The game is a conversion of my game [Ice Cream Castle](https://github.com/drcouzelis/pico-8), originally for the PICO-8.
 
