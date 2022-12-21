@@ -11,6 +11,8 @@ By tiny, I mean you can see everything the game has to offer in 15 seconds.
 
 The ROM is under 32k. The game will run on actual DMG hardware.
 
+![Screenshot](/dev/screenshot-20221220.png?raw=true)
+
 ## TODO
 
 - [x] Collision detection
