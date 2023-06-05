@@ -49,3 +49,4 @@ The ROM is under 32k. The game will run on actual DMG hardware.
 - 2022-12-04 Gameplay is now complete
 - 2022-12-11 Added sound effects
 - 2022-12-11 Final version 1.0 complete (almost 2 years)
+- 2023-06-04 Final version 1.1, fixed bug in score counter

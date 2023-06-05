@@ -951,6 +951,8 @@ UpdateRound:
     add  SPRITE_0
     ld   [ROUND_C_OAM_TILEID], a
 
+    ret
+
 ; Triple digits, 100 to 255
 .triple
 
